@@ -9,7 +9,7 @@ app.use(cors());
 
 const PORT = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL;
-const APP_ORIGIN = process.env.APP_ORIGIN || 'https://microtask.work.gd';
+const APP_ORIGIN = process.env.APP_ORIGIN || 'https://microapps.work.gd';
 const SHOO_BASE_URL = process.env.SHOO_BASE_URL || 'https://shoo.dev';
 const SHOO_ISSUER = process.env.SHOO_ISSUER || SHOO_BASE_URL;
 
@@ -20,7 +20,9 @@ const pool = new Pool({
   connectionTimeoutMillis: 5000,
 });
 
-pool.on('error', (err) => {});
+pool.on('error', (err) => {
+  console.error('Unexpected pool error:', err);
+});
 
 async function initDb() {
   const client = await pool.connect();
@@ -35,10 +37,42 @@ async function initDb() {
         subtasks JSONB NOT NULL DEFAULT '[]',
         updated_at BIGINT NOT NULL DEFAULT 0,
         deleted BOOLEAN NOT NULL DEFAULT false,
+        "order" INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (id, user_id)
       );
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);`);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS notes (
+        id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
+        content TEXT NOT NULL DEFAULT '',
+        folder_id TEXT,
+        archived BOOLEAN NOT NULL DEFAULT false,
+        subtasks JSONB NOT NULL DEFAULT '[]',
+        updated_at BIGINT NOT NULL DEFAULT 0,
+        deleted BOOLEAN NOT NULL DEFAULT false,
+        "order" INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (id, user_id)
+      );
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_notes_user_id ON notes(user_id);`);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS folders (
+        id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL DEFAULT '',
+        parent_id TEXT,
+        "order" INTEGER NOT NULL DEFAULT 0,
+        updated_at BIGINT NOT NULL DEFAULT 0,
+        deleted BOOLEAN NOT NULL DEFAULT false,
+        PRIMARY KEY (id, user_id)
+      );
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_folders_user_id ON folders(user_id);`);
   } finally {
     client.release();
   }
@@ -70,6 +104,9 @@ async function authMiddleware(req, res, next) {
   }
 }
 
+const TASK_COLUMNS = `id, user_id, title, description, completed, subtasks, updated_at, deleted, "order"`;
+const TASK_ORDER = `ORDER BY "order" ASC, updated_at DESC`;
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: Date.now() });
 });
@@ -77,8 +114,7 @@ app.get('/health', (req, res) => {
 app.get('/tasks', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, user_id, title, description, completed, subtasks, updated_at, deleted
-       FROM tasks WHERE user_id = $1 ORDER BY updated_at DESC`,
+      `SELECT ${TASK_COLUMNS} FROM tasks WHERE user_id = $1 ${TASK_ORDER}`,
       [req.userId],
     );
 
@@ -113,8 +149,8 @@ app.post('/tasks', authMiddleware, async (req, res) => {
       if (!task.id) continue;
 
       await client.query(
-        `INSERT INTO tasks (id, user_id, title, description, completed, subtasks, updated_at, deleted)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO tasks (id, user_id, title, description, completed, subtasks, updated_at, deleted, "order")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (id, user_id) DO UPDATE SET
            title = EXCLUDED.title,
            description = EXCLUDED.description,
@@ -124,7 +160,8 @@ app.post('/tasks', authMiddleware, async (req, res) => {
              WHEN EXCLUDED.updated_at > tasks.updated_at THEN EXCLUDED.updated_at
              ELSE tasks.updated_at
            END,
-           deleted = EXCLUDED.deleted`,
+           deleted = EXCLUDED.deleted,
+           "order" = EXCLUDED."order"`,
         [
           task.id,
           req.userId,
@@ -134,6 +171,7 @@ app.post('/tasks', authMiddleware, async (req, res) => {
           JSON.stringify(task.subtasks || []),
           task.updated_at || Date.now(),
           task.deleted || false,
+          task.order ?? 0,
         ],
       );
     }
@@ -141,8 +179,7 @@ app.post('/tasks', authMiddleware, async (req, res) => {
     await client.query('COMMIT');
 
     const result = await pool.query(
-      `SELECT id, user_id, title, description, completed, subtasks, updated_at, deleted
-       FROM tasks WHERE user_id = $1 ORDER BY updated_at DESC`,
+      `SELECT ${TASK_COLUMNS} FROM tasks WHERE user_id = $1 ${TASK_ORDER}`,
       [req.userId],
     );
 
@@ -155,22 +192,141 @@ app.post('/tasks', authMiddleware, async (req, res) => {
   }
 });
 
-app.delete('/tasks/:id', authMiddleware, async (req, res) => {
+const NOTE_COLUMNS = `id, user_id, title, content, folder_id, archived, subtasks, updated_at, deleted, "order"`;
+const NOTE_ORDER = `ORDER BY "order" ASC, updated_at DESC`;
+const FOLDER_COLUMNS = `id, user_id, name, parent_id, "order", updated_at, deleted`;
+const FOLDER_ORDER = `ORDER BY "order" ASC`;
+
+app.get('/notes', authMiddleware, async (req, res) => {
   try {
-    await pool.query(
-      `UPDATE tasks SET deleted = true, updated_at = $1 WHERE id = $2 AND user_id = $3`,
-      [Date.now(), req.params.id, req.userId],
+    const notesResult = await pool.query(
+      `SELECT ${NOTE_COLUMNS} FROM notes WHERE user_id = $1 ${NOTE_ORDER}`,
+      [req.userId],
     );
-    res.json({ ok: true });
+    const foldersResult = await pool.query(
+      `SELECT ${FOLDER_COLUMNS} FROM folders WHERE user_id = $1 ${FOLDER_ORDER}`,
+      [req.userId],
+    );
+    res.json({ notes: notesResult.rows, folders: foldersResult.rows });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to delete task' });
+    res.status(500).json({ error: 'Failed to fetch notes' });
+  }
+});
+
+app.post('/notes', authMiddleware, async (req, res) => {
+  const incomingNotes = req.body.notes;
+  if (!Array.isArray(incomingNotes)) {
+    return res.status(400).json({ error: 'notes must be an array' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    for (const note of incomingNotes) {
+      if (!note.id) continue;
+
+      await client.query(
+        `INSERT INTO notes (id, user_id, title, content, folder_id, archived, subtasks, updated_at, deleted, "order")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (id, user_id) DO UPDATE SET
+           title = EXCLUDED.title,
+           content = EXCLUDED.content,
+           folder_id = EXCLUDED.folder_id,
+           archived = EXCLUDED.archived,
+           subtasks = EXCLUDED.subtasks,
+           updated_at = CASE
+             WHEN EXCLUDED.updated_at > notes.updated_at THEN EXCLUDED.updated_at
+             ELSE notes.updated_at
+           END,
+           deleted = EXCLUDED.deleted,
+           "order" = EXCLUDED."order"`,
+        [
+          note.id,
+          req.userId,
+          note.title || '',
+          note.content || '',
+          note.folder_id || null,
+          note.archived || false,
+          JSON.stringify(note.subtasks || []),
+          note.updated_at || Date.now(),
+          note.deleted || false,
+          note.order ?? 0,
+        ],
+      );
+    }
+
+    await client.query('COMMIT');
+
+    const result = await pool.query(
+      `SELECT ${NOTE_COLUMNS} FROM notes WHERE user_id = $1 ${NOTE_ORDER}`,
+      [req.userId],
+    );
+    res.json({ notes: result.rows });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: 'Failed to upsert notes' });
+  } finally {
+    client.release();
+  }
+});
+
+app.post('/notes/folders', authMiddleware, async (req, res) => {
+  const incomingFolders = req.body.folders;
+  if (!Array.isArray(incomingFolders)) {
+    return res.status(400).json({ error: 'folders must be an array' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    for (const folder of incomingFolders) {
+      if (!folder.id) continue;
+
+      await client.query(
+        `INSERT INTO folders (id, user_id, name, parent_id, "order", updated_at, deleted)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (id, user_id) DO UPDATE SET
+           name = EXCLUDED.name,
+           parent_id = EXCLUDED.parent_id,
+           "order" = EXCLUDED."order",
+           updated_at = CASE
+             WHEN EXCLUDED.updated_at > folders.updated_at THEN EXCLUDED.updated_at
+             ELSE folders.updated_at
+           END,
+           deleted = EXCLUDED.deleted`,
+        [
+          folder.id,
+          req.userId,
+          folder.name || '',
+          folder.parent_id || null,
+          folder.order ?? 0,
+          folder.updated_at || Date.now(),
+          folder.deleted || false,
+        ],
+      );
+    }
+
+    await client.query('COMMIT');
+
+    const result = await pool.query(
+      `SELECT ${FOLDER_COLUMNS} FROM folders WHERE user_id = $1 ${FOLDER_ORDER}`,
+      [req.userId],
+    );
+    res.json({ folders: result.rows });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: 'Failed to upsert folders' });
+  } finally {
+    client.release();
   }
 });
 
 async function start() {
   try {
     await initDb();
-    app.listen(PORT, '0.0.0.0', () => {});
+    app.listen(PORT, '0.0.0.0');
   } catch (err) {
     process.exit(1);
   }

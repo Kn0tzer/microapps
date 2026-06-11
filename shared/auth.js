@@ -7,39 +7,34 @@ const Auth = (() => {
   function init() {
     if (_initialized) return;
     _initialized = true;
-
-    const stored = localStorage.getItem('shoo_identity');
-    if (stored) {
-      try {
-        _identity = JSON.parse(stored);
-        if (_identity && _identity.token) {
-          try {
-            const payload = JSON.parse(atob(_identity.token.split('.')[1]));
-            if (payload.exp && payload.exp * 1000 < Date.now()) {
-              _identity = null;
-              localStorage.removeItem('shoo_identity');
-            }
-          } catch {
-            _identity = null;
-            localStorage.removeItem('shoo_identity');
-          }
-        } else {
-          _identity = null;
-        }
-      } catch {
-        _identity = null;
-        localStorage.removeItem('shoo_identity');
-      }
-    }
-
+    _loadStoredIdentity();
     _pollForShooCallback();
   }
 
+  function _loadStoredIdentity() {
+    const stored = localStorage.getItem('shoo_identity');
+    if (!stored) return;
+    try {
+      _identity = JSON.parse(stored);
+      if (!_identity?.token) {
+        _identity = null;
+        return;
+      }
+      const payload = JSON.parse(atob(_identity.token.split('.')[1]));
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        _identity = null;
+        localStorage.removeItem('shoo_identity');
+      }
+    } catch {
+      _identity = null;
+      localStorage.removeItem('shoo_identity');
+    }
+  }
+
   function _pollForShooCallback() {
-    if (_identity && _identity.token) return;
+    if (_identity?.token) return;
 
     let attempts = 0;
-    const maxAttempts = 300;
     const interval = setInterval(() => {
       attempts++;
 
@@ -49,7 +44,7 @@ const Auth = (() => {
         try { sdkIdentity = window.Shoo.getIdentity(); } catch {}
       }
 
-      const rawIdentity = shooIdentity || (sdkIdentity && sdkIdentity.token ? sdkIdentity : null);
+      const rawIdentity = shooIdentity || (sdkIdentity?.token ? sdkIdentity : null);
 
       if (rawIdentity) {
         clearInterval(interval);
@@ -67,22 +62,16 @@ const Auth = (() => {
             if (!_hasNotifiedSignIn) {
               _hasNotifiedSignIn = true;
               _notifyListeners('signed_in');
-              _triggerPostLoginSync();
+              if (typeof Sync !== 'undefined' && Sync.pullFromServer) {
+                setTimeout(() => Sync.pullFromServer(), 200);
+              }
             }
           }
         } catch {}
       }
 
-      if (attempts >= maxAttempts) {
-        clearInterval(interval);
-      }
+      if (attempts >= 300) clearInterval(interval);
     }, 100);
-  }
-
-  function _triggerPostLoginSync() {
-    if (typeof Sync !== 'undefined' && Sync.pullFromServer) {
-      setTimeout(() => Sync.pullFromServer(), 200);
-    }
   }
 
   function signIn() {
@@ -101,7 +90,7 @@ const Auth = (() => {
   }
 
   function getToken() { return _identity?.token || null; }
-  function isAuthenticated() { return !!(_identity && _identity.token && _identity.userId); }
+  function isAuthenticated() { return !!(_identity?.token && _identity?.userId); }
 
   function onAuthChange(callback) {
     _listeners.push(callback);
@@ -118,42 +107,32 @@ const Auth = (() => {
     if (!window.Shoo) return false;
     try {
       const shooId = window.Shoo.getIdentity();
-      if (shooId && shooId.userId && shooId.token) {
-        _identity = { userId: shooId.userId, token: shooId.token };
-        localStorage.setItem('shoo_identity', JSON.stringify(_identity));
-        _notifyListeners('refreshed');
+      if (shooId?.userId && shooId?.token) {
+        const newId = { userId: shooId.userId, token: shooId.token };
+        const stored = localStorage.getItem('shoo_identity');
+        const storedParsed = stored ? JSON.parse(stored) : null;
+
+        if (!storedParsed || storedParsed.token !== shooId.token) {
+          _identity = newId;
+          localStorage.setItem('shoo_identity', JSON.stringify(_identity));
+          _notifyListeners('synced');
+        } else {
+          _identity = newId;
+        }
         return true;
       }
     } catch {}
     return false;
   }
 
-  function syncWithShooSDK() {
-    if (!window.Shoo) return;
-    try {
-      const shooId = window.Shoo.getIdentity();
-      if (shooId && shooId.userId && shooId.token) {
-        const stored = localStorage.getItem('shoo_identity');
-        const storedParsed = stored ? JSON.parse(stored) : null;
-        if (!storedParsed || storedParsed.token !== shooId.token) {
-          _identity = { userId: shooId.userId, token: shooId.token };
-          localStorage.setItem('shoo_identity', JSON.stringify(_identity));
-          _notifyListeners('synced');
-        }
-      } else if (isAuthenticated() && !shooId) {
-        signOut();
-      }
-    } catch {}
-  }
-
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       init();
-      setTimeout(syncWithShooSDK, 500);
+      setTimeout(refreshIdentity, 500);
     });
   } else {
     init();
-    setTimeout(syncWithShooSDK, 500);
+    setTimeout(refreshIdentity, 500);
   }
 
   return { signIn, signOut, getToken, isAuthenticated, onAuthChange, refreshIdentity };

@@ -4,6 +4,20 @@
     box-sizing: border-box;
 }
 
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+textarea:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px #0a0a0a inset !important;
+    -webkit-text-fill-color: #e0e0e0 !important;
+    caret-color: #e0e0e0;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: #000000;
@@ -106,6 +120,23 @@ body {
 
 .task-item.removing {
     animation: slideOut 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.task-item.dragging {
+    opacity: 0.4;
+}
+
+.task-item.reordering {
+    opacity: 0.9;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    background: #1a1a1a;
+    border-radius: 8px;
+    transition: box-shadow 0.2s ease, background 0.2s ease;
+}
+
+body.dragging-in-progress,
+body.dragging-in-progress * {
+    user-select: none;
 }
 
 .task-item:hover {
@@ -273,8 +304,8 @@ body {
     position: fixed;
     top: 1rem;
     right: 1rem;
-    width: 60px;
-    height: 60px;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
     background: transparent;
     border: none;
@@ -290,11 +321,10 @@ body {
 .settings-icon:hover {
     color: #e0e0e0;
     background: #1a1a1a;
-    transform: rotate(30deg);
 }
 
 .settings-icon:active {
-    transform: rotate(60deg);
+    transform: scale(0.95);
 }
 
 .completed-section {
@@ -362,6 +392,80 @@ body {
 .completed-list.collapsed {
     opacity: 0;
     pointer-events: none;
+}
+
+.mobile-task-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1002;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    background: rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    align-items: center;
+    justify-content: center;
+}
+
+.mobile-task-modal.visible {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.mobile-task-modal-content {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 16px;
+    padding: 0.5rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    transform: scale(0.95);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    width: calc(100% - 2rem);
+    max-width: 360px;
+}
+
+.mobile-task-modal.visible .mobile-task-modal-content {
+    transform: scale(1);
+}
+
+.mobile-task-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #e0e0e0;
+    font-family: inherit;
+    font-size: 1rem;
+    outline: none;
+    padding: 0.5rem 0.75rem;
+    min-width: 0;
+}
+
+.mobile-task-input::placeholder {
+    color: #666;
+}
+
+.mobile-task-submit {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #333;
+    border: none;
+    color: #e0e0e0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
+    flex-shrink: 0;
+}
+
+.mobile-task-submit:hover {
+    background: #444;
 }
 
 .sidebar {
@@ -560,46 +664,6 @@ body {
     transform: scale(1);
 }
 
-.settings-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
-}
-
-.settings-header h2 {
-    font-size: 1.2rem;
-    font-weight: 500;
-    color: #e0e0e0;
-}
-
-.close-settings {
-    background: transparent;
-    border: none;
-    color: #666;
-    cursor: pointer;
-    padding: 0.25rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.close-settings svg {
-    transition: color 0.2s ease, transform 0.2s ease;
-}
-
-.close-settings:hover {
-    color: #999;
-}
-
-.close-settings:hover svg {
-    transform: rotate(90deg);
-}
-
-.close-settings:active svg {
-    transform: rotate(180deg);
-}
-
 .settings-content {
     color: #999;
     font-size: 0.9rem;
@@ -672,14 +736,20 @@ body {
 
     .sidebar {
         width: 100%;
+        background: #0a0a0a !important;
     }
 
-    .task-item {
+    .task-item,
+    .task-title,
+    .sidebar-title {
         font-size: 1.15rem;
     }
 
-    .task-title,
-    .sidebar-title {
+    .task-description {
+        font-size: 1.05rem;
+    }
+
+    .sidebar-header {
         font-size: 1.15rem;
     }
 
@@ -699,7 +769,7 @@ body {
 
     .completed-section.expanded {
         height: 785px;
-        background: #0a0a0a;
+        background: #0a0a0a !important;
         border-top-left-radius: 36px;
         border-top-right-radius: 36px;
         border-top: 1px solid #444;
@@ -711,7 +781,7 @@ body {
         width: 100%;
         justify-content: center;
         flex-shrink: 0;
-        margin-top: -0.25rem;
+        margin-top: -0.75rem;
     }
 
     .completed-section.expanded .completed-header {
@@ -722,5 +792,68 @@ body {
     .completed-list {
         overflow: hidden;
         max-height: none;
+    }
+
+    .mobile-task-modal {
+        display: block;
+    }
+
+    .delete-button {
+        opacity: 1;
+        pointer-events: all;
+    }
+}
+
+@media (hover: none) and (pointer: coarse) {
+    .task-item:hover .delete-button,
+    .delete-button {
+        opacity: 1;
+        pointer-events: all;
+    }
+
+    .checkbox-wrapper input[type="checkbox"]:hover ~ .checkbox-custom {
+        border-color: #333;
+    }
+
+    .add-button:hover {
+        background: #1a1a1a;
+        transform: none;
+    }
+
+    .settings-icon:hover {
+        color: #666;
+        background: transparent;
+    }
+
+    .completed-header:hover {
+        color: #666;
+    }
+
+    .close-sidebar:hover {
+        color: #666;
+    }
+
+    .close-sidebar:hover svg {
+        transform: none;
+    }
+
+    .auth-button:hover {
+        background: #1a1a1a;
+        border-color: #333;
+    }
+
+    .auth-button.secondary:hover {
+        background: transparent;
+        color: #999;
+    }
+
+    .delete-button:hover {
+        color: #666;
+    }
+
+    .add-subtask-button:hover {
+        background: #1a1a1a;
+        color: #999;
+        transform: none;
     }
 }

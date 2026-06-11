@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>microtask</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://shoo.dev/shoo.js" defer></script>
+</head>
+<body>
+  <button id="settingsIcon" class="settings-icon" aria-label="account">
+    <svg width="30" height="30" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M8 8C9.65685 8 11 6.65685 11 5C11 3.34315 9.65685 2 8 2C6.34315 2 5 3.34315 5 5C5 6.65685 6.34315 8 8 8Z" fill="none"/>
+      <path d="M8 8C9.65685 8 11 6.65685 11 5C11 3.34315 9.65685 2 8 2C6.34315 2 5 3.34315 5 5C5 6.65685 6.34315 8 8 8Z" stroke="currentColor" stroke-width="1"/>
+      <path d="M3 13C3 11.3431 4.34315 10 6 10H10C11.6569 10 13 11.3431 13 13V14H3V13Z" fill="none"/>
+      <path d="M3 13C3 11.3431 4.34315 10 6 10H10C11.6569 10 13 11.3431 13 13V14H3V13Z" stroke="currentColor" stroke-width="1"/>
+    </svg>
+  </button>
+
+  <div class="completed-section">
+    <div id="completedHeader" class="completed-header collapsed">
+      <div class="arrow-icon">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M10 12L14 16L18 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span>completed</span>
+    </div>
+    <div id="completedList" class="completed-list collapsed"></div>
+  </div>
+
+  <div class="container">
+    <div id="taskList" class="task-list">
+      <div class="task-list-inner"></div>
+    </div>
+  </div>
+
+  <button id="addButton" class="add-button" aria-label="add task">
+    <svg width="56" height="56" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+
+  <div id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+      <input id="sidebarTitle" class="sidebar-title" type="text" placeholder="untitled task" autocomplete="off" />
+      <button id="closeSidebar" class="close-sidebar" aria-label="close">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <textarea id="taskDescription" class="task-description" placeholder="add description" autocomplete="off"></textarea>
+
+    <div class="subtasks-section">
+      <div id="subtasksList" class="subtasks-list"></div>
+      <button id="addSubtaskButton" class="add-subtask-button" aria-label="add subtask">
+        <svg width="48" height="48" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div id="settingsOverlay" class="settings-overlay">
+    <div class="settings-box">
+      <div class="settings-content">
+        <div id="authSection" class="auth-section">
+          <button id="signInBtn" class="auth-button">sign in</button>
+          <button id="signOutBtn" class="auth-button secondary" style="display:none">sign out</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="mobileTaskModal" class="mobile-task-modal">
+    <div class="mobile-task-modal-content">
+      <input id="mobileTaskInput" class="mobile-task-input" type="text" placeholder="task title" autocomplete="off" />
+      <button id="mobileTaskSubmit" class="mobile-task-submit" aria-label="add task">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M5 12L19 12M13 6L19 12L13 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div id="overlay" class="overlay"></div>
+
+  <script src="../shared/auth.js"></script>
+  <script src="../shared/sync.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>micronote</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://shoo.dev/shoo.js" defer></script>
+</head>
+<body>
+  <div class="left-panel" id="leftPanel">
+    <div class="notes-sidebar" id="notesSidebar">
+      <div class="notes-section" id="notesSection">
+        <div class="notes-list" id="notesList">
+          <div class="notes-list-inner" id="notesListInner"></div>
+        </div>
+        <button id="addNoteButton" class="add-note-floating" aria-label="new note">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="archived-section" id="archivedSection">
+        <div id="archivedHeader" class="archived-header collapsed">
+          <div class="arrow-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M10 12L14 16L18 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <span>archived</span>
+        </div>
+        <div id="archivedList" class="archived-list collapsed"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="resize-handle" id="resizeHandle"></div>
+
+  <div class="editor-panel" id="editorPanel">
+    <div class="editor-stage">
+      <div id="editorEmptyState" class="editor-empty-state">
+        <p>no note selected</p>
+        <button id="settingsIcon" class="settings-icon" aria-label="account">
+          <svg width="30" height="30" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 8C9.65685 8 11 6.65685 11 5C11 3.34315 9.65685 2 8 2C6.34315 2 5 3.34315 5 5C5 6.65685 6.34315 8 8 8Z" fill="none"/>
+            <path d="M8 8C9.65685 8 11 6.65685 11 5C11 3.34315 9.65685 2 8 2C6.34315 2 5 3.34315 5 5C5 6.65685 6.34315 8 8 8Z" stroke="currentColor" stroke-width="1"/>
+            <path d="M3 13C3 11.3431 4.34315 10 6 10H10C11.6569 10 13 11.3431 13 13V14H3V13Z" fill="none"/>
+            <path d="M3 13C3 11.3431 4.34315 10 6 10H10C11.6569 10 13 11.3431 13 13V14H3V13Z" stroke="currentColor" stroke-width="1"/>
+          </svg>
+        </button>
+      </div>
+      <div id="editorContent" class="editor-content">
+        <div class="editor-header">
+          <input id="noteTitle" class="note-title" type="text" placeholder="untitled note" autocomplete="off" />
+          <div class="editor-actions">
+            <span id="noteTimestamp" class="note-timestamp"></span>
+            <button id="fullscreenButton" class="action-button fullscreen-btn" aria-label="fullscreen">
+              <span class="fullscreen-icons">
+                <svg class="fullscreen-icon-enter" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M5 9V5H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M19 9V5H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M19 15V19H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M5 15V19H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <svg class="fullscreen-icon-exit" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M5 5H9V9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M19 5H15V9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M19 19H15V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M5 19H9V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+            </button>
+            <button id="deleteNoteButton" class="action-button delete-note-btn" aria-label="delete note" style="display:none">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 4H14M6 4V2H10V4M5 7V13M8 7V13M11 7V13M3 4L4 14H12L13 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button id="restoreNoteButton" class="action-button restore-note-btn" aria-label="restore note" style="display:none">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12C21 16.9706 16.9706 21 12 21C8.5 21 5.5 19 4 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M4 12L3 16L7 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button id="closeEditor" class="action-button close-editor-btn" aria-label="close editor" style="display:none">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div id="noteEditor" class="note-editor" contenteditable="true" spellcheck="true"></div>
+        <div class="subtasks-section">
+          <div id="subtasksList" class="subtasks-list"></div>
+          <button id="addSubtaskButton" class="add-subtask-button" aria-label="add subtask">
+            <svg width="40" height="40" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="settingsOverlay" class="settings-overlay">
+    <div class="settings-box">
+      <div class="settings-content">
+        <div id="authSection" class="auth-section">
+          <button id="signInBtn" class="auth-button">sign in</button>
+          <button id="signOutBtn" class="auth-button secondary" style="display:none">sign out</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="mobileNewNoteModal" class="modal-overlay">
+    <div class="modal-content">
+      <input id="mobileNoteInput" class="modal-input" type="text" placeholder="note title" autocomplete="off" />
+      <button id="mobileNoteSubmit" class="modal-submit" aria-label="add note">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M5 12L19 12M13 6L19 12L13 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div id="overlay" class="overlay"></div>
+
+  <script src="../shared/auth.js"></script>
+  <script src="../shared/sync.js"></script>
+  <script src="script.js"></script>
+  <script type="module">
+    try {
+      const [crepeModule] = await Promise.all([
+        import('https://esm.sh/@milkdown/crepe@7?bundle'),
+        fetch('https://unpkg.com/@milkdown/crepe@7/theme/frame-dark.css').then(r => r.text()).then(css => {
+          const s = document.createElement('style');
+          s.textContent = css;
+          document.head.appendChild(s);
+        }),
+      ]);
+      const { Crepe } = crepeModule;
+      let instance = null;
+
+      window.MilkdownEditor = {
+        async create(root, defaultValue, onChange) {
+          this.destroy();
+          const features = {
+            [Crepe.Feature.Toolbar]: false,
+            [Crepe.Feature.BlockEdit]: false,
+            [Crepe.Feature.CodeMirror]: false,
+            [Crepe.Feature.Latex]: false,
+            [Crepe.Feature.ImageBlock]: false,
+            [Crepe.Feature.LinkTooltip]: false,
+            [Crepe.Feature.Table]: false,
+            [Crepe.Feature.ListItem]: false,
+          };
+          instance = new Crepe({
+            root,
+            defaultValue: defaultValue || '',
+            features,
+            featureConfigs: {
+              [Crepe.Feature.Placeholder]: { text: 'start writing' },
+            },
+          });
+          instance.on((listener) => {
+            listener.markdownUpdated((_ctx, markdown) => {
+              if (onChange) onChange(markdown);
+            });
+          });
+          await instance.create();
+          const pm = root.querySelector('.ProseMirror');
+          if (pm) pm.removeAttribute('contenteditable');
+        },
+        destroy() {
+          if (instance) {
+            instance.destroy();
+            instance = null;
+          }
+        },
+        focus() {
+          const pm = document.querySelector('.ProseMirror');
+          if (pm) pm.focus();
+        },
+      };
+    } catch (e) {
+      console.error('Milkdown failed to load, using contenteditable fallback:', e);
+    }
+  </script>
+</body>
+</html>
