@@ -8,7 +8,9 @@ sign in once and sync everything securely across your devices
 
 ## microshare
 
-<img src="https://raw.githubusercontent.com/Kn0tzer/microapps/refs/heads/main/screenshots/microshare.png" height="500" align="center">
+<a href="https://microapps.work.gd/microshare">
+  <img src="/screenshots/microshare.png" align="center" height="500">
+</a>
 
 microshare lets you upload, save, and share files with no size limit and no expiry*
 
@@ -21,19 +23,25 @@ there's also an option to make files expire after a set time. files below 200mb 
 
 ## microtask
 
-<img src="https://raw.githubusercontent.com/Kn0tzer/microapps/refs/heads/main/screenshots/microtask.png" width="800" align="center">
+<a href="https://microapps.work.gd/microtask">
+  <img src="/screenshots/microtask.png" align="center" height="500">
+</a>
 
 micronote is a to-do app for listing and checking off any tasks you need to remember
 
 ## microhabit
 
-<img src="https://raw.githubusercontent.com/Kn0tzer/microapps/refs/heads/main/screenshots/microhabit.png" width="800" align="center">
+<a href="https://microapps.work.gd/microhabit">
+  <img src="/screenshots/microhabit.png" align="center" height="500">
+</a>
 
 microhabit is a habit tracking app
 
 ## micronote
 
-<img src="https://raw.githubusercontent.com/Kn0tzer/microapps/refs/heads/main/screenshots/micronote.png" width="800" align="center">
+<a href="https://microapps.work.gd/micronote">
+  <img src="/screenshots/micronote.png" align="center" height="500">
+</a>
 
 micronote is a markdown based note-taking app
 
