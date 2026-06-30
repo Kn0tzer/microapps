@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#000000" />
+  <title>microhabit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://shoo.dev/shoo.js" defer></script>
+</head>
+<body>
+  <button id="settingsIcon" class="settings-icon" aria-label="account">
+    <svg width="30" height="30" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M8 8C9.65685 8 11 6.65685 11 5C11 3.34315 9.65685 2 8 2C6.34315 2 5 3.34315 5 5C5 6.65685 6.34315 8 8 8Z" fill="none"/>
+      <path d="M8 8C9.65685 8 11 6.65685 11 5C11 3.34315 9.65685 2 8 2C6.34315 2 5 3.34315 5 5C5 6.65685 6.34315 8 8 8Z" stroke="currentColor" stroke-width="1"/>
+      <path d="M3 13C3 11.3431 4.34315 10 6 10H10C11.6569 10 13 11.3431 13 13V14H3V13Z" fill="none"/>
+      <path d="M3 13C3 11.3431 4.34315 10 6 10H10C11.6569 10 13 11.3431 13 13V14H3V13Z" stroke="currentColor" stroke-width="1"/>
+    </svg>
+  </button>
+
+  <div class="progression-bar">
+    <button id="progressionPrev" class="progression-nav" aria-label="previous day">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M10 12L6 8L10 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <div id="progressionDays" class="progression-days"></div>
+    <button id="progressionNext" class="progression-nav" aria-label="next day">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="container">
+    <div id="habitList" class="habit-list">
+      <div class="habit-list-inner"></div>
+    </div>
+  </div>
+
+  <button id="addButton" class="add-button" aria-label="add habit">
+    <svg width="56" height="56" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+
+  <div id="settingsOverlay" class="settings-overlay">
+    <div class="settings-box">
+      <div class="settings-content">
+        <div id="authSection" class="auth-section">
+          <button id="signInBtn" class="auth-button">sign in</button>
+          <button id="signOutBtn" class="auth-button secondary" style="display:none">sign out</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="mobileHabitModal" class="mobile-habit-modal">
+    <div class="mobile-habit-modal-content">
+      <input id="mobileHabitTitle" class="mobile-habit-input" type="text" placeholder="habit title" autocomplete="off" />
+      <input id="mobileHabitInterval" class="mobile-habit-interval" type="number" min="1" placeholder="days" autocomplete="off" />
+      <button id="mobileHabitSubmit" class="mobile-habit-submit" aria-label="add habit">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M5 12L19 12M13 6L19 12L13 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div id="midnightReminder" class="midnight-reminder">
+    <div class="midnight-reminder-text"></div>
+  </div>
+
+  <div id="overlay" class="overlay"></div>
+
+  <script src="../shared/auth.js"></script>
+  <script src="../shared/sync.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

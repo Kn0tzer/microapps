@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#000000" />
+  <title>microshare</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://shoo.dev/shoo.js" defer></script>
+</head>
+<body>
+  <div class="devices-section">
+    <div class="devices-header">
+      <span>devices</span>
+      <div class="devices-header-actions">
+        <button id="globalToggle" class="global-toggle" type="button" aria-label="join global">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path opacity="0.1" d="M20.5719 14.75C20.8498 13.8832 20.9998 12.9591 20.9998 12C20.9998 10.2423 20.496 8.60233 19.6248 7.21658C19.588 7.23784 19.5454 7.25001 19.4998 7.25001H17.8539C16.968 7.25001 16.2498 7.96819 16.2498 8.85411C16.2498 9.65109 15.7995 10.3797 15.0867 10.7361L15.0061 10.7764C14.3726 11.0931 13.627 11.0931 12.9936 10.7764L12.9129 10.7361C12.2001 10.3797 11.7498 9.65109 11.7498 8.85411C11.7498 7.96819 11.0316 7.25001 10.1457 7.25001H9.99983C8.75719 7.25001 7.74983 6.24265 7.74983 5.00001V4.0647C5.27174 5.3947 3.48867 7.85158 3.08594 10.75H5.99983C7.24247 10.75 8.24983 11.7574 8.24983 13C8.24983 13.9665 9.03333 14.75 9.99983 14.75C11.2425 14.75 12.2498 15.7574 12.2498 17V20.9966C13.4963 20.9626 14.6796 20.6752 15.7498 20.1839V17C15.7498 15.7574 16.7572 14.75 17.9998 14.75H20.5719Z" fill="currentColor"/>
+            <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2"/>
+            <path d="M3.5 11H6C7.10457 11 8 11.8954 8 13V13C8 14.1046 8.89543 15 10 15V15C11.1046 15 12 15.8954 12 17V20.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M8 4V5C8 6.10457 8.89543 7 10 7H10.1459C11.1699 7 12 7.83011 12 8.8541V8.8541C12 9.55638 12.3968 10.1984 13.0249 10.5125L13.1056 10.5528C13.6686 10.8343 14.3314 10.8343 14.8944 10.5528L14.9751 10.5125C15.6032 10.1984 16 9.55638 16 8.8541V8.8541C16 7.83011 16.8301 7 17.8541 7H19.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M16 19.5V17C16 15.8954 16.8954 15 18 15H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>global</span>
+        </button>
+      </div>
+    </div>
+    <div id="devicesList" class="devices-list"></div>
+  </div>
+
+  <div class="container">
+    <div id="shareGrid" class="share-grid"></div>
+  </div>
+
+  <div class="archived-section">
+    <button id="archivedHeader" class="archived-header collapsed" type="button">
+      <div class="arrow-icon">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M10 12L14 16L18 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span>archived</span>
+    </button>
+    <div id="archivedList" class="archived-list collapsed"></div>
+  </div>
+
+  <input id="fileInput" type="file" multiple hidden />
+
+  <button id="settingsIcon" class="settings-icon" aria-label="account">
+    <svg width="30" height="30" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M8 8C9.65685 8 11 6.65685 11 5C11 3.34315 9.65685 2 8 2C6.34315 2 5 3.34315 5 5C5 6.65685 6.34315 8 8 8Z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M3 13C3 11.3431 4.34315 10 6 10H10C11.6569 10 13 11.3431 13 13V14H3V13Z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    </svg>
+  </button>
+
+  <button id="addButton" class="add-button" aria-label="add file">
+    <svg width="56" height="56" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+
+  <div id="incomingModal" class="incoming-modal">
+    <div class="incoming-modal-content">
+      <div class="incoming-modal-title" id="incomingFrom"></div>
+      <div class="incoming-modal-name" id="incomingFileName"></div>
+      <div class="incoming-modal-size" id="incomingFileSize"></div>
+      <div class="incoming-modal-buttons">
+        <button id="incomingAcceptBtn" class="incoming-modal-btn">accept</button>
+        <button id="incomingDeclineBtn" class="incoming-modal-btn secondary">decline</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="warningModal" class="warning-modal">
+    <div class="warning-modal-content">
+      <div class="warning-modal-title">connection failed</div>
+      <div class="warning-modal-text" id="warningModalText"></div>
+      <button id="warningOkBtn" class="warning-modal-btn">ok</button>
+    </div>
+  </div>
+
+  <div id="expiryModal" class="expiry-modal">
+    <div class="expiry-modal-content">
+      <div class="expiry-modal-title">file expiration</div>
+      <div class="expiry-modal-subtitle" id="expiryModalSubtitle"></div>
+      <div class="expiry-modal-options" id="expiryModalOptions"></div>
+    </div>
+  </div>
+
+  <div id="settingsOverlay" class="settings-overlay">
+    <div class="settings-box">
+      <div class="settings-content">
+        <div class="settings-section">
+          <div id="authSection" class="auth-section">
+            <button id="signInBtn" class="auth-button">sign in</button>
+            <button id="signOutBtn" class="auth-button secondary" style="display:none">sign out</button>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="userhash-input-row">
+            <input id="userhashInput" type="text" placeholder="catbox userhash" autocomplete="off" spellcheck="false" />
+          </div>
+          <div id="userhashTooltip" class="userhash-tooltip visible">
+            an <a href="https://catbox.moe/user/register.php" target="_blank">account</a> is required to upload to <a href="https://catbox.moe" target="_blank">catbox</a> and <a href="https://litterbox.catbox.moe" target="_blank">litterbox</a>. creating an account and entering your <a href="https://catbox.moe/user/manage.php" target="_blank">userhash</a> unlocks some extra features.
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-title plain">file expiration</div>
+          <div class="default-options" id="defaultOptions"></div>
+        </div>
+        <div class="settings-section">
+          <label class="toggle-row">
+            <input type="checkbox" id="preferFileditchToggle" />
+            <span>prefer fileditch</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="dragOverlay" class="drag-overlay">
+    <div class="drag-overlay-text">drop files to upload</div>
+  </div>
+
+  <div id="overlay" class="overlay"></div>
+
+  <script src="../shared/auth.js"></script>
+  <script src="../shared/sync.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

@@ -7,13 +7,14 @@ let settingsOverlay, addSubtaskButton, subtasksList;
 let signInBtn, signOutBtn;
 let mobileTaskModal, mobileTaskInput, mobileTaskSubmit;
 let _signingOut = false;
+let _lastTitleEdit = 0;
+let taskListInner;
 
 let _syncDebounceTimer = null;
 const SYNC_DEBOUNCE_MS = 500;
 
 let _draggedTask = null;
 let _draggedEl = null;
-let _dragPlaceholder = null;
 let _longPressTimer = null;
 let _isReordering = false;
 let _reorderTaskId = null;
@@ -22,6 +23,7 @@ const DELETE_SVG = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" 
 
 document.addEventListener('DOMContentLoaded', () => {
   taskList = document.getElementById('taskList');
+  taskListInner = taskList.querySelector('.task-list-inner');
   completedList = document.getElementById('completedList');
   addButton = document.getElementById('addButton');
   sidebar = document.getElementById('sidebar');
@@ -44,7 +46,6 @@ document.addEventListener('DOMContentLoaded', () => {
   renderTasks();
   attachEventListeners();
 
-  completedHeader.classList.add('collapsed');
   completedList.classList.add('collapsed');
 
   Sync = SyncFactory.create({
@@ -57,11 +58,13 @@ document.addEventListener('DOMContentLoaded', () => {
       title: t.title || '',
       description: t.description || '',
       completed: t.completed || false,
+      subtasks: (t.subtasks || []).map(s => ({ id: s.id, title: s.title || '', completed: s.completed || false })),
     }),
     toLocal: (s) => ({
       title: s.title || '',
       description: s.description || '',
       completed: s.completed || false,
+      subtasks: (s.subtasks || []).map(s => ({ id: Number(s.id) || s.id, title: s.title || '', completed: s.completed || false })),
     }),
     render: renderTasks,
   });
@@ -91,6 +94,7 @@ function attachEventListeners() {
   addSubtaskButton.addEventListener('click', addSubtask);
 
   sidebarTitle.addEventListener('input', (e) => {
+    _lastTitleEdit = Date.now();
     updateTaskTitle(currentTaskId, e.target.value);
     renderTasks();
   });
@@ -170,14 +174,27 @@ function submitMobileTask() {
   addTask(title || null);
 }
 
+function generateId() {
+  const arr = new Uint8Array(8);
+  crypto.getRandomValues(arr);
+  let id = '';
+  for (let i = 0; i < arr.length; i++) {
+    id += arr[i].toString(36).padStart(2, '0');
+  }
+  return id + Date.now().toString(36);
+}
+
 function addTask(title) {
   const task = {
-    id: Date.now(),
+    id: generateId(),
+    _createdAt: Date.now(),
     title: title || '',
     completed: false,
     description: '',
     subtasks: [],
     order: tasks.length,
+    updated_at: Date.now(),
+    deleted: false,
   };
   tasks.push(task);
   saveTasks();
@@ -198,11 +215,7 @@ function deleteTask(taskId) {
   animateAndRun(el, () => {
     const task = findTask(taskId);
     if (task) {
-      if (task.completed) {
-        task.deleted = true;
-      } else {
-        task.completed = true;
-      }
+      task.deleted = true;
       task.updated_at = Date.now();
       syncMutation([task]);
     }
@@ -215,7 +228,15 @@ function deleteTask(taskId) {
 function toggleTaskComplete(taskId) {
   const el = document.querySelector(`[data-task-id="${taskId}"]`);
   const task = findTask(taskId);
-  if (!task || !el) return;
+  if (!task) return;
+  if (!el) {
+    task.completed = !task.completed;
+    task.updated_at = Date.now();
+    saveTasks();
+    syncMutation([task]);
+    renderTasks();
+    return;
+  }
   animateAndRun(el, () => {
     task.completed = !task.completed;
     task.updated_at = Date.now();
@@ -232,6 +253,7 @@ function updateTaskTitle(taskId, title) {
   task.updated_at = Date.now();
   saveTasks();
   debouncedSyncMutation([task]);
+  renderTasks();
 }
 
 function updateTaskDescription() {
@@ -244,9 +266,9 @@ function updateTaskDescription() {
 }
 
 function openTaskSidebar(taskId) {
-  currentTaskId = taskId;
   const task = findTask(taskId);
   if (!task) return;
+  currentTaskId = taskId;
   sidebarTitle.value = task.title || '';
   taskDescription.value = task.description || '';
   renderSubtasks();
@@ -283,7 +305,7 @@ function renderSubtasks() {
   if (!task) return;
   subtasksList.innerHTML = '';
 
-  task.subtasks.forEach(subtask => {
+  (task.subtasks || []).forEach(subtask => {
     const item = document.createElement('div');
     item.className = 'task-item';
     item.dataset.subtaskId = subtask.id;
@@ -340,19 +362,12 @@ function deleteSubtask(taskId, subtaskId) {
 }
 
 function toggleCompleted() {
-  const isMobile = window.innerWidth <= 768;
   completedHeader.classList.toggle('collapsed');
   const section = document.querySelector('.completed-section');
   section.classList.toggle('expanded');
   completedList.classList.toggle('collapsed');
 
-  const arrow = completedHeader.querySelector('.arrow-icon');
-  const expanded = section.classList.contains('expanded');
-  arrow.style.transform = isMobile
-    ? (expanded ? 'rotate(-180deg)' : 'rotate(-90deg)')
-    : (expanded ? '' : 'rotate(-90deg)');
-
-  if (expanded) {
+  if (section.classList.contains('expanded')) {
     updateCompletedHeight();
   } else {
     section.style.height = '';
@@ -382,7 +397,7 @@ function updateAuthUI() {
 }
 
 function renderTasks() {
-  const inner = taskList.querySelector('.task-list-inner');
+  const inner = taskListInner;
   inner.innerHTML = '';
 
   const active = tasks.filter(t => !t.completed && !t.deleted)
@@ -399,10 +414,26 @@ function renderTasks() {
     animateTaskListCentering();
     updateCompletedHeight();
   });
+
+  refreshOpenSidebarIfStale();
+}
+
+function refreshOpenSidebarIfStale() {
+  if (currentTaskId === null) return;
+  const task = findTask(currentTaskId);
+  if (!task) return;
+  if (document.activeElement === sidebarTitle || document.activeElement === taskDescription) return;
+  if (Date.now() - _lastTitleEdit < 1000) return;
+  const title = task.title || '';
+  const description = task.description || '';
+  if (sidebarTitle.value === title && taskDescription.value === description) return;
+  sidebarTitle.value = title;
+  taskDescription.value = description;
+  renderSubtasks();
 }
 
 function animateTaskListCentering() {
-  const inner = taskList.querySelector('.task-list-inner');
+  const inner = taskListInner;
   if (!inner) return;
   const h = taskList.clientHeight;
   const ch = inner.scrollHeight;
@@ -432,7 +463,7 @@ function initDragAndDrop(item, task) {
     document.body.classList.add('dragging-in-progress');
     document.body.style.cursor = 'move';
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', task.id);
+    e.dataTransfer.setData('text/plain', String(task.id));
   });
 
   item.addEventListener('dragend', () => {
@@ -441,10 +472,6 @@ function initDragAndDrop(item, task) {
     document.body.style.cursor = '';
     _draggedTask = null;
     _draggedEl = null;
-    if (_dragPlaceholder && _dragPlaceholder.parentNode) {
-      _dragPlaceholder.remove();
-    }
-    _dragPlaceholder = null;
   });
 
   item.addEventListener('dragover', (e) => {
@@ -454,11 +481,11 @@ function initDragAndDrop(item, task) {
     if (!dragging || dragging === item) return;
     const rect = item.getBoundingClientRect();
     const midY = rect.top + rect.height / 2;
-    const inner = taskList.querySelector('.task-list-inner');
+    const inner = taskListInner;
     if (e.clientY < midY) {
       inner.insertBefore(dragging, item);
     } else {
-      inner.insertBefore(dragging, item.nextSibling);
+      inner.insertBefore(dragging, item.nextElementSibling);
     }
   });
 
@@ -505,7 +532,7 @@ function initMobileReorder(item, task) {
     const deltaY = e.touches[0].clientY - startY;
     item.style.transform = `translateY(${deltaY}px)`;
 
-    const inner = taskList.querySelector('.task-list-inner');
+    const inner = taskListInner;
     const items = [...inner.querySelectorAll('.task-item:not(.reordering)')];
     const rect = item.getBoundingClientRect();
     const itemMidY = rect.top + rect.height / 2;
@@ -513,13 +540,13 @@ function initMobileReorder(item, task) {
     for (const other of items) {
       const otherRect = other.getBoundingClientRect();
       const otherMidY = otherRect.top + otherRect.height / 2;
-      if (itemMidY < otherMidY && other.previousSibling === item) {
+      if (itemMidY < otherMidY && other.previousElementSibling === item) {
         inner.insertBefore(item, other);
         break;
-      } else if (itemMidY > otherMidY && other.nextSibling && other.nextSibling !== item) {
-        inner.insertBefore(item, other.nextSibling);
+      } else if (itemMidY > otherMidY && other.nextElementSibling && other.nextElementSibling !== item) {
+        inner.insertBefore(item, other.nextElementSibling);
         break;
-      } else if (itemMidY > otherMidY && !other.nextSibling) {
+      } else if (itemMidY > otherMidY && !other.nextElementSibling) {
         inner.appendChild(item);
         break;
       }
@@ -541,7 +568,7 @@ function initMobileReorder(item, task) {
 }
 
 function saveDragOrder() {
-  const inner = taskList.querySelector('.task-list-inner');
+  const inner = taskListInner;
   const items = inner.querySelectorAll('.task-item');
   items.forEach((item, index) => {
     const task = findTask(Number(item.dataset.taskId));
@@ -560,7 +587,7 @@ function createTaskElement(task) {
   item.className = 'task-item';
   item.dataset.taskId = task.id;
 
-  if (task.id > Date.now() - 1000) item.classList.add('adding');
+  if (task._createdAt && Date.now() - task._createdAt < 1000) item.classList.add('adding');
 
   item.appendChild(createCheckbox(task.completed, () => toggleTaskComplete(task.id)));
 
@@ -583,11 +610,12 @@ function createTaskElement(task) {
   title.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
   item.appendChild(title);
 
-  if (task.subtasks.length > 0) {
+  const subtasks = task.subtasks || [];
+  if (subtasks.length > 0) {
     const counter = document.createElement('div');
     counter.className = 'subtask-counter';
-    const done = task.subtasks.filter(s => s.completed).length;
-    counter.textContent = `${done}/${task.subtasks.length}`;
+    const done = subtasks.filter(s => s.completed).length;
+    counter.textContent = `${done}/${subtasks.length}`;
     item.appendChild(counter);
   }
 
@@ -611,7 +639,13 @@ function saveTasks() {
 function loadTasks() {
   try {
     const raw = localStorage.getItem('tasks');
-    tasks = raw ? JSON.parse(raw) : [];
+    if (raw && raw.length > 10000000) { console.warn('tasks localStorage too large, resetting'); tasks = []; return; }
+    const parsed = raw ? JSON.parse(raw) : [];
+    tasks = parsed.map(t => ({
+      ...t,
+      subtasks: Array.isArray(t.subtasks) ? t.subtasks : [],
+      deleted: t.deleted ?? false,
+    }));
   } catch {
     tasks = [];
   }
@@ -622,7 +656,6 @@ function findTask(id) {
 }
 
 function syncMutation(changedTasks) {
-  if (!Auth.isAuthenticated()) return;
   Sync.pushToServer(changedTasks);
 }
 

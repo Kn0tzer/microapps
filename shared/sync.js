@@ -33,6 +33,10 @@ const SyncFactory = (() => {
       _pollTimer = setInterval(() => {
         if (_syncEnabled && !_isSyncing) pullFromServer();
       }, POLL_INTERVAL);
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) { _stopPolling(); }
+        else if (_syncEnabled) { _startPolling(); pullFromServer(); }
+      });
     }
 
     function _stopPolling() {
@@ -46,6 +50,8 @@ const SyncFactory = (() => {
       if (!Auth.isAuthenticated()) {
         if (attempt < 10) {
           setTimeout(() => _initialPullWithRetry(attempt + 1), 500);
+        } else {
+          console.warn('[Sync] initialPullWithRetry failed: not authenticated after 10 attempts');
         }
         return;
       }
@@ -69,6 +75,11 @@ const SyncFactory = (() => {
 
           if (response.status === 401) {
             Auth.refreshIdentity();
+            const newToken = Auth.getToken();
+            if (newToken && retryAttempt < 1) {
+              await new Promise(r => setTimeout(r, 500));
+              return _apiRequest(method, path, body, retryAttempt + 1);
+            }
             throw new Error('Auth failed');
           }
 
@@ -82,10 +93,11 @@ const SyncFactory = (() => {
 
         return await response.json();
       } catch (err) {
-        if (retryAttempt < MAX_RETRIES && (err.message?.includes('fetch') || err.name === 'TypeError')) {
+        if (retryAttempt < MAX_RETRIES && err.name !== 'AbortError' && (err.message?.includes('fetch') || err.name === 'TypeError')) {
           await new Promise(r => setTimeout(r, RETRY_DELAY * Math.pow(2, retryAttempt)));
           return _apiRequest(method, path, body, retryAttempt + 1);
         }
+        console.error('[Sync] API request failed:', err);
         throw err;
       }
     }
@@ -95,7 +107,6 @@ const SyncFactory = (() => {
         [endpoint]: items.map(item => ({
           id: String(item.id),
           ...buildPayload(item),
-          subtasks: Array.isArray(item.subtasks) ? item.subtasks : [],
           updated_at: item.updated_at || Date.now(),
           deleted: item.deleted || false,
           order: item.order ?? 0,
@@ -107,11 +118,6 @@ const SyncFactory = (() => {
       return {
         id: Number(serverItem.id) || serverItem.id,
         ...toLocal(serverItem),
-        subtasks: Array.isArray(serverItem.subtasks) ? serverItem.subtasks.map(s => ({
-          id: Number(s.id) || s.id,
-          title: s.title || '',
-          completed: s.completed || false,
-        })) : [],
         updated_at: serverItem.updated_at,
         deleted: serverItem.deleted || false,
         order: serverItem.order ?? 0,
@@ -127,7 +133,7 @@ const SyncFactory = (() => {
         const serverItem = serverMap.get(id);
 
         if (!serverItem) {
-          merged.set(id, li);
+          if (!li.deleted) merged.set(id, li);
         } else if (!serverItem.deleted && serverItem.updated_at <= (li.updated_at || 0)) {
           merged.set(id, li);
         } else if (!serverItem.deleted) {
@@ -152,16 +158,19 @@ const SyncFactory = (() => {
     async function pullFromServer() {
       if (!_syncEnabled || _isSyncing) return;
       _isSyncing = true;
+      let pullFailed = true;
 
       try {
         const data = await _apiRequest('GET', `/${endpoint}`);
+        pullFailed = false;
         const serverItems = data[endpoint] || [];
         let merged = _merge(getItems(), serverItems);
 
         if (maxItems) {
-          const completed = merged.filter(t => t.completed && !t.deleted);
+          const isCompleted = t => (t.completed !== undefined ? t.completed : false);
+          const completed = merged.filter(t => isCompleted(t) && !t.deleted);
           if (completed.length > maxItems) {
-            const toKeep = completed.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0)).slice(0, maxItems);
+            const toKeep = [...completed].sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0)).slice(0, maxItems);
             const toWipe = completed.filter(t => !toKeep.includes(t));
             if (toWipe.length > 0) {
               try {
@@ -169,12 +178,12 @@ const SyncFactory = (() => {
                 merged = _merge(merged, wipeData[endpoint] || []);
               } catch {}
             }
-            merged = [...merged.filter(t => !t.completed || t.deleted), ...toKeep];
+            merged = [...merged.filter(t => !isCompleted(t) || t.deleted), ...toKeep];
           }
         }
 
         const serverIds = new Set(serverItems.map(si => String(si.id)));
-        const localOnly = merged.filter(si => !serverIds.has(String(si.id)) && !si.deleted);
+        const localOnly = merged.filter(si => !serverIds.has(String(si.id)));
         if (localOnly.length > 0) {
           try {
             const pushData = await _apiRequest('POST', `/${endpoint}`, _buildPayload(localOnly));
@@ -186,6 +195,15 @@ const SyncFactory = (() => {
         _saveLocal(merged);
         render();
       } catch {} finally {
+        if (pullFailed) {
+          try {
+            const merged = getItems();
+            const localOnly = merged.filter(si => !si.deleted);
+            if (localOnly.length > 0) {
+              await _apiRequest('POST', `/${endpoint}`, _buildPayload(localOnly));
+            }
+          } catch {}
+        }
         _isSyncing = false;
       }
     }
@@ -198,7 +216,7 @@ const SyncFactory = (() => {
         setItems(_merge(getItems(), data[endpoint] || []));
         _saveLocal(getItems());
         render();
-      } catch {}
+      } catch (err) { console.error('[Sync] pushToServer failed:', err); }
     }
 
     return { init, pullFromServer, pushToServer };

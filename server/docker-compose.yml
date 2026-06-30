@@ -1,0 +1,39 @@
+services:
+  microapps-db:
+    image: postgres:16-alpine
+    container_name: microapps-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: microtask
+      POSTGRES_PASSWORD: ${MICROTASK_DB_PASSWORD}
+      POSTGRES_DB: microtask
+    volumes:
+      - microapps-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD
+        - pg_isready
+        - -U
+        - microtask
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  microapps-api:
+    build:
+      context: ./microapps/server
+      dockerfile: Dockerfile
+    container_name: microapps-api
+    restart: unless-stopped
+    environment:
+      PORT: '3000'
+      DATABASE_URL: postgres://microtask:${MICROTASK_DB_PASSWORD}@microapps-db:5432/microtask
+      APP_ORIGIN: https://microapps.work.gd
+      SHOO_BASE_URL: https://shoo.dev
+      SHOO_ISSUER: https://shoo.dev
+    depends_on:
+      microapps-db:
+        condition: service_healthy
+        
+volumes:
+  microapps-db-data:

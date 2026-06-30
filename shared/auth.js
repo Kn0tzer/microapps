@@ -3,12 +3,19 @@ const Auth = (() => {
   let _listeners = [];
   let _initialized = false;
   let _hasNotifiedSignIn = false;
+  let _pollInterval = null;
 
   function init() {
     if (_initialized) return;
     _initialized = true;
     _loadStoredIdentity();
     _pollForShooCallback();
+  }
+
+  function base64urlDecode(str) {
+    str = str.replace(/-/g, '+').replace(/_/g, '/');
+    while (str.length % 4) str += '=';
+    return atob(str);
   }
 
   function _loadStoredIdentity() {
@@ -20,8 +27,8 @@ const Auth = (() => {
         _identity = null;
         return;
       }
-      const payload = JSON.parse(atob(_identity.token.split('.')[1]));
-      if (payload.exp && payload.exp * 1000 < Date.now()) {
+      const payload = JSON.parse(base64urlDecode(_identity.token.split('.')[1]));
+      if (payload.exp && payload.exp * 1000 < Date.now() - 60000) {
         _identity = null;
         localStorage.removeItem('shoo_identity');
       }
@@ -35,8 +42,9 @@ const Auth = (() => {
     if (_identity?.token) return;
 
     let attempts = 0;
-    const interval = setInterval(() => {
+    _pollInterval = setInterval(() => {
       attempts++;
+      if (_identity?.token) { clearInterval(_pollInterval); return; }
 
       const shooIdentity = localStorage.getItem('shoo_identity');
       let sdkIdentity = null;
@@ -47,7 +55,7 @@ const Auth = (() => {
       const rawIdentity = shooIdentity || (sdkIdentity?.token ? sdkIdentity : null);
 
       if (rawIdentity) {
-        clearInterval(interval);
+        clearInterval(_pollInterval);
         try {
           const parsed = typeof rawIdentity === 'string' ? JSON.parse(rawIdentity) : rawIdentity;
           const newIdentity = {
@@ -70,8 +78,13 @@ const Auth = (() => {
         } catch {}
       }
 
-      if (attempts >= 300) clearInterval(interval);
+      if (attempts >= 300) {
+        clearInterval(_pollInterval);
+        console.warn('[Auth] Polling timed out after 30s');
+      }
     }, 100);
+    window.addEventListener('pagehide', () => clearInterval(_pollInterval));
+    window.addEventListener('beforeunload', () => clearInterval(_pollInterval));
   }
 
   function signIn() {
@@ -85,6 +98,7 @@ const Auth = (() => {
     try { window.Shoo?.clearIdentity(); } catch {}
     _identity = null;
     _hasNotifiedSignIn = false;
+    if (_pollInterval) clearInterval(_pollInterval);
     localStorage.removeItem('shoo_identity');
     _notifyListeners('signed_out');
   }
@@ -119,9 +133,14 @@ const Auth = (() => {
         } else {
           _identity = newId;
         }
+        if (!storedParsed) {
+          _hasNotifiedSignIn = false;
+          _notifyListeners('signed_in');
+        }
         return true;
       }
     } catch {}
+    _hasNotifiedSignIn = false;
     return false;
   }
 
