@@ -8,30 +8,32 @@ sign in once and sync everything securely across your devices
 
 ## microshare
 
-<screenshot>
+<img src="https://raw.githubusercontent.com/Kn0tzer/microapps/refs/heads/main/screenshots/microshare.png" height="500" align="center">
 
 microshare lets you upload, save, and share files with no size limit and no expiry*
 
-* files above 200mb may not last until the heat death of the universe, but will last for *at least* a year, probably much more, courtesy of [fileditch](https://new.fileditch.com/). files below 200mb will last until the heat death of the universe, courtesy of [catbox](https://catbox.moe)
+files above 200mb may not last until the heat death of the universe, but will last for *at least* a year, probably much longer. courtesy of [fileditch](https://new.fileditch.com/)
 
-there is an option to make files expire after a certain time. files below 200mb support hotlinking
+files below 200mb will last until the heat death of the universe, courtesy of [catbox](https://catbox.moe)
+
+there's also an option to make files expire after a set time. files below 200mb support hotlinking
 
 
 ## microtask
 
-<screenshot>
+<img src="https://raw.githubusercontent.com/Kn0tzer/microapps/refs/heads/main/screenshots/microtask.png" width="800" align="center">
 
 micronote is a to-do app for listing and checking off any tasks you need to remember
 
 ## microhabit
 
-<screenshot>
+<img src="https://raw.githubusercontent.com/Kn0tzer/microapps/refs/heads/main/screenshots/microhabit.png" width="800" align="center">
 
 microhabit is a habit tracking app
 
 ## micronote
 
-<screenshot>
+<img src="https://raw.githubusercontent.com/Kn0tzer/microapps/refs/heads/main/screenshots/micronote.png" width="800" align="center">
 
 micronote is a markdown based note-taking app
 
