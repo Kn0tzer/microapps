@@ -1,6 +1,9 @@
 let habits = [];
 let selectedDate = '';
-let progressionOffset = 0;
+
+if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+  location.replace('https://' + location.host + location.pathname + location.search);
+}
 
 let habitList, addButton, settingsIcon, settingsOverlay;
 let signInBtn, signOutBtn;
@@ -8,23 +11,22 @@ let mobileHabitModal, mobileHabitTitle, mobileHabitInterval, mobileHabitSubmit;
 let midnightReminder;
 let progressionDays, progressionPrev, progressionNext;
 let overlay;
-let _signingOut = false;
 
 let _syncDebounceTimer = null;
+let _pendingSyncHabits = [];
 const SYNC_DEBOUNCE_MS = 500;
 
-let _draggedHabit = null;
-let _draggedEl = null;
-let _longPressTimer = null;
-let _isReordering = false;
-let _reorderHabitId = null;
+const DELETE_SVG = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4H14M6 4V2H10V4M5 7V13M8 7V13M11 7V13M3 4L4 14H12L13 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const PLAY_SVG = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 3L13 8L4 13V3Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const PAUSE_SVG = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 3V13M11 3V13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function isTextSelected() {
+  return window.getSelection && window.getSelection().toString().length > 0;
+}
+
 let _progressionAnimating = false;
 let _editingInterval = false;
 let _midnightTimer = null;
-
-const DELETE_SVG = '<svg width="24" height="24" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4H14M6 4V2H10V4M5 7V13M8 7V13M11 7V13M3 4L4 14H12L13 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const PAUSE_SVG = '<svg width="24" height="24" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 3V13M11 3V13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const PLAY_SVG = '<svg width="24" height="24" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 3L13 8L4 13V3Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 function todayStr() {
   return dateToStr(new Date());
@@ -49,14 +51,16 @@ function addDays(dateStr, n) {
 }
 
 function diffDays(a, b) {
-  const da = strToDate(a);
-  const db = strToDate(b);
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  const da = Date.UTC(ay, am - 1, ad);
+  const db = Date.UTC(by, bm - 1, bd);
   return Math.round((db - da) / 86400000);
 }
 
 function dayName(dateStr) {
   const d = strToDate(dateStr);
-  return d.toLocaleDateString('en', { weekday: 'short' }).toLowerCase();
+  return d.toLocaleDateString(undefined, { weekday: 'short' }).toLowerCase();
 }
 
 function dateNum(dateStr) {
@@ -64,11 +68,9 @@ function dateNum(dateStr) {
 }
 
 function getProgressionDays() {
-  const today = todayStr();
-  const center = addDays(today, progressionOffset);
   const days = [];
   for (let i = -2; i <= 1; i++) {
-    days.push(addDays(center, i));
+    days.push(addDays(selectedDate, i));
   }
   return days;
 }
@@ -96,53 +98,50 @@ function renderProgression() {
     btn.appendChild(name);
     btn.appendChild(num);
     btn.addEventListener('click', () => {
-      selectedDate = d;
-      renderProgression();
-      renderHabits();
+      if (d === selectedDate) return;
+      animateProgressionTransition(d < selectedDate ? -1 : 1, d);
     });
     progressionDays.appendChild(btn);
   });
 
-  progressionNext.disabled = progressionOffset >= 0;
-
-  const leftmost = addDays(today, progressionOffset - 2);
-  const minStart = addDays(today, -365);
-  progressionPrev.disabled = leftmost <= minStart;
+  progressionNext.disabled = false;
 }
 
-function changeProgression(direction) {
+function animateProgressionTransition(direction, newSelectedDate) {
   if (_progressionAnimating) return;
-  const newOffset = progressionOffset + direction;
-  const today = todayStr();
-  if (direction > 0 && newOffset > 0) return;
-  if (direction < 0) {
-    const leftmost = addDays(today, newOffset - 2);
-    if (leftmost <= addDays(today, -365)) return;
-  }
   _progressionAnimating = true;
-  progressionDays.style.transition = 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.12s ease';
+
+  const safetyTimer = setTimeout(() => {
+    progressionDays.style.transition = '';
+    progressionDays.style.transform = '';
+    progressionDays.style.opacity = '';
+    selectedDate = newSelectedDate;
+    renderProgression();
+    renderHabits();
+    _progressionAnimating = false;
+  }, 500);
+
+  const TRANSITION = 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.12s ease';
+  progressionDays.style.transition = TRANSITION;
   progressionDays.style.transform = `translateX(${-direction * 20}px)`;
   progressionDays.style.opacity = '0';
 
   progressionDays.addEventListener('transitionend', function handler() {
     progressionDays.removeEventListener('transitionend', handler);
-    progressionOffset = newOffset;
-    const days = getProgressionDays();
-    if (days.length > 0 && !days.includes(selectedDate)) {
-      selectedDate = days[Math.floor(days.length / 2)];
-    }
+    clearTimeout(safetyTimer);
+    selectedDate = newSelectedDate;
     renderProgression();
     renderHabits();
-    
+
     progressionDays.style.transition = 'none';
     progressionDays.style.transform = `translateX(${direction * 20}px)`;
     progressionDays.style.opacity = '0';
-    
+
     requestAnimationFrame(() => {
-      progressionDays.style.transition = 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.12s ease';
+      progressionDays.style.transition = TRANSITION;
       progressionDays.style.transform = 'translateX(0)';
       progressionDays.style.opacity = '1';
-      
+
       progressionDays.addEventListener('transitionend', function done() {
         progressionDays.removeEventListener('transitionend', done);
         progressionDays.style.transition = '';
@@ -150,6 +149,23 @@ function changeProgression(direction) {
       }, { once: true });
     });
   }, { once: true });
+}
+
+function changeProgression(direction) {
+  if (_progressionAnimating) return;
+  const today = todayStr();
+  const newDate = addDays(selectedDate, direction);
+  if (newDate <= addDays(today, -365)) {
+    progressionPrev.disabled = true;
+    return;
+  }
+  if (newDate >= addDays(today, 365)) {
+    progressionNext.disabled = true;
+    return;
+  }
+  progressionPrev.disabled = false;
+  progressionNext.disabled = false;
+  animateProgressionTransition(direction, newDate);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -202,15 +218,20 @@ document.addEventListener('DOMContentLoaded', () => {
   Sync.init();
 
   updateAuthUI();
-  Auth.onAuthChange(() => {
-    if (!_signingOut) updateAuthUI();
-  });
+  Auth.onAuthChange(() => updateAuthUI());
 
   window.addEventListener('resize', () => {
     requestAnimationFrame(animateHabitListCentering);
   });
 
   _midnightTimer = setInterval(checkMidnight, 60000);
+
+  window.addEventListener('pagehide', () => {
+    if (_midnightTimer) {
+      clearInterval(_midnightTimer);
+      _midnightTimer = null;
+    }
+  });
 });
 
 function attachEventListeners() {
@@ -221,22 +242,15 @@ function attachEventListeners() {
   });
   overlay.addEventListener('click', closeSettingsPanel);
 
-  progressionPrev.addEventListener('click', () => {
-    changeProgression(-1);
-  });
-
-  progressionNext.addEventListener('click', () => {
-    changeProgression(1);
-  });
+  progressionPrev.addEventListener('click', () => changeProgression(-1));
+  progressionNext.addEventListener('click', () => changeProgression(1));
 
   signInBtn.addEventListener('click', () => Auth.signIn());
   signOutBtn.addEventListener('click', () => {
-    _signingOut = true;
     signOutBtn.textContent = 'sign out successful';
     signOutBtn.disabled = true;
     Auth.signOut();
     setTimeout(() => {
-      _signingOut = false;
       signOutBtn.textContent = 'sign out';
       signOutBtn.disabled = false;
       updateAuthUI();
@@ -276,14 +290,21 @@ function closeMobileHabitModal() {
 
 function submitMobileHabit() {
   const title = mobileHabitTitle.value.trim();
-  const interval = parseInt(mobileHabitInterval.value) || 1;
+  const interval = Math.max(1, parseInt(mobileHabitInterval.value) || 1);
   closeMobileHabitModal();
   addHabit(title || null, interval);
 }
 
 function generateId() {
   const arr = new Uint8Array(8);
-  crypto.getRandomValues(arr);
+  try {
+    crypto.getRandomValues(arr);
+  } catch (e) {
+    console.warn('crypto.getRandomValues failed, falling back to Math.random:', e);
+    for (let i = 0; i < arr.length; i++) {
+      arr[i] = Math.floor(Math.random() * 256);
+    }
+  }
   let id = '';
   for (let i = 0; i < arr.length; i++) {
     id += arr[i].toString(36).padStart(2, '0');
@@ -294,14 +315,14 @@ function generateId() {
 function addHabit(title, intervalDays) {
   const habit = {
     id: generateId(),
-    _createdAt: Date.now(),
+    createdAt: Date.now(),
     title: title || '',
     intervalDays: intervalDays || 1,
     lastCompletedAt: null,
     completions: [],
     paused: false,
     order: habits.length,
-    updated_at: Date.now(),
+    updatedAt: Date.now(),
     deleted: false,
   };
   habits.push(habit);
@@ -321,28 +342,27 @@ function deleteHabit(habitId) {
   const el = document.querySelector(`[data-habit-id="${habitId}"]`);
   if (!el) return;
 
+  const habit = findHabit(habitId);
+  if (habit) {
+    habit.deleted = true;
+    habit.updatedAt = Date.now();
+  }
+  saveHabits();
+  syncMutation(habit ? [habit] : []);
+
   el.classList.add('removing');
   el.addEventListener('animationend', () => {
-    const habit = findHabit(habitId);
-    if (habit) {
-      habit.deleted = true;
-      habit.updated_at = Date.now();
-      syncMutation([habit]);
-    }
-    saveHabits();
-    renderHabits();
+    if (el && el.parentNode) renderHabits();
   }, { once: true });
 }
 
 function toggleComplete(habitId, date) {
   const habit = findHabit(habitId);
   if (!habit) return;
+  if (habit.paused) return;
 
-  const dateObj = strToDate(date);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const diffDays = Math.round((today - dateObj) / 86400000);
-  if (diffDays < -2 || diffDays > 21) return;
+  const dayDiff = diffDays(todayStr(), date);
+  if (dayDiff < -2 || dayDiff > 21) { return; }
 
   const existing = habit.completions.findIndex(c => c.date === date);
   if (existing >= 0) {
@@ -352,12 +372,12 @@ function toggleComplete(habitId, date) {
     habit.completions.sort((a, b) => a.date.localeCompare(b.date));
   }
 
-  const sorted = habit.completions.filter(c => c.date <= todayStr());
+  const sorted = habit.completions.filter(c => c.date <= date);
   habit.lastCompletedAt = sorted.length > 0
     ? strToDate(sorted[sorted.length - 1].date).getTime()
     : null;
 
-  habit.updated_at = Date.now();
+  habit.updatedAt = Date.now();
   saveHabits();
   syncMutation([habit]);
   renderHabits();
@@ -367,7 +387,7 @@ function pauseHabit(habitId) {
   const habit = findHabit(habitId);
   if (!habit) return;
   habit.paused = !habit.paused;
-  habit.updated_at = Date.now();
+  habit.updatedAt = Date.now();
   saveHabits();
   syncMutation([habit]);
   renderHabits();
@@ -377,7 +397,7 @@ function updateTitle(habitId, title) {
   const habit = findHabit(habitId);
   if (!habit) return;
   habit.title = title;
-  habit.updated_at = Date.now();
+  habit.updatedAt = Date.now();
   saveHabits();
   debouncedSyncMutation([habit]);
 }
@@ -386,9 +406,9 @@ function updateInterval(habitId, days) {
   const habit = findHabit(habitId);
   if (!habit) return;
   const parsed = parseInt(days);
-  if (isNaN(parsed) || parsed < 1) return;
+  if (isNaN(parsed) || parsed < 1) { return; }
   habit.intervalDays = parsed;
-  habit.updated_at = Date.now();
+  habit.updatedAt = Date.now();
   saveHabits();
   syncMutation([habit]);
 }
@@ -398,14 +418,18 @@ function isCompletedOn(habit, date) {
 }
 
 function isHabitDueOn(habit, date) {
-  if (habit.paused) return false;
   if (habit.intervalDays <= 1) return true;
-  if (!habit.lastCompletedAt) return true;
 
-  const lastDate = dateToStr(new Date(habit.lastCompletedAt));
-  if (date < lastDate) return true;
+  let anchorDate;
+  if (habit.createdAt) {
+    anchorDate = dateToStr(new Date(habit.createdAt));
+  } else if (habit.completions && habit.completions.length > 0) {
+    anchorDate = habit.completions[0].date;
+  } else {
+    return true;
+  }
 
-  const diff = diffDays(lastDate, date);
+  const diff = diffDays(anchorDate, date);
   return diff % habit.intervalDays === 0;
 }
 
@@ -414,7 +438,7 @@ function renderHabits() {
   inner.innerHTML = '';
 
   const active = habits
-    .filter(h => !h.deleted && isHabitDueOn(h, selectedDate))
+    .filter(h => !h.deleted && (h.paused || isHabitDueOn(h, selectedDate)))
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   active.forEach(h => inner.appendChild(createHabitElement(h)));
@@ -428,14 +452,19 @@ function createHabitElement(habit) {
   item.dataset.habitId = habit.id;
 
   if (habit.paused) item.classList.add('paused');
-  if (habit._createdAt && Date.now() - habit._createdAt < 1000) item.classList.add('adding');
+  if (habit.createdAt && Date.now() - habit.createdAt < 1000) item.classList.add('adding');
 
   const content = document.createElement('div');
   content.className = 'habit-item-content';
 
   const completed = isCompletedOn(habit, selectedDate);
 
-  content.appendChild(createCheckbox(completed, () => toggleComplete(habit.id, selectedDate)));
+  const checkbox = createCheckbox(completed, () => toggleComplete(habit.id, selectedDate));
+  if (habit.paused) {
+    const cb = checkbox.querySelector('input[type="checkbox"]');
+    if (cb) cb.disabled = true;
+  }
+  content.appendChild(checkbox);
 
   const titleWrap = document.createElement('div');
   titleWrap.className = 'habit-title-wrap';
@@ -475,8 +504,12 @@ function createHabitElement(habit) {
     const finish = () => {
       _editingInterval = false;
       const val = parseInt(input.value) || habit.intervalDays;
-      updateInterval(habit.id, val);
-      renderHabits();
+      habit.intervalDays = val;
+      habit.updatedAt = Date.now();
+      saveHabits();
+      syncMutation([habit]);
+      intervalEl.textContent = val === 1 ? 'daily' : `every ${val}d`;
+      input.replaceWith(intervalEl);
     };
     input.addEventListener('blur', finish);
     input.addEventListener('keydown', (e) => {
@@ -553,10 +586,11 @@ function closeSettingsPanel() {
 }
 
 function updateAuthUI() {
-  if (!signInBtn || !signOutBtn) return;
   if (Auth.isAuthenticated()) {
     signInBtn.style.display = 'none';
     signOutBtn.style.display = 'block';
+    signOutBtn.textContent = 'sign out';
+    signOutBtn.disabled = false;
   } else {
     signInBtn.style.display = 'block';
     signOutBtn.style.display = 'none';
@@ -566,23 +600,25 @@ function updateAuthUI() {
 function checkMidnight() {
   const now = new Date();
   const hours = now.getHours();
-  if (hours >= 0 && hours < 5) {
-    const h = hours === 0 ? 12 : hours;
-    const m = String(now.getMinutes()).padStart(2, '0');
-    const text = midnightReminder.querySelector('.midnight-reminder-text');
-    text.textContent = `it is ${h}:${m}am`;
-    midnightReminder.classList.add('visible');
-  } else {
+  if (hours >= 5) {
     midnightReminder.classList.remove('visible');
+    return;
   }
+  const h = hours === 0 ? 12 : hours;
+  const m = String(now.getMinutes()).padStart(2, '0');
+  const text = midnightReminder.querySelector('.midnight-reminder-text');
+  text.textContent = `it is ${h}:${m}am`;
+  midnightReminder.classList.add('visible');
 }
 
 function initDragAndDrop(item, habit) {
   item.draggable = true;
 
   item.addEventListener('dragstart', (e) => {
-    _draggedHabit = habit;
-    _draggedEl = item;
+    if (e.target.classList.contains('habit-title') || isTextSelected() || (document.activeElement && document.activeElement.classList.contains('habit-title'))) {
+      e.preventDefault();
+      return;
+    }
     item.classList.add('dragging');
     document.body.classList.add('dragging-in-progress');
     document.body.style.cursor = 'move';
@@ -594,8 +630,6 @@ function initDragAndDrop(item, habit) {
     item.classList.remove('dragging');
     document.body.classList.remove('dragging-in-progress');
     document.body.style.cursor = '';
-    _draggedHabit = null;
-    _draggedEl = null;
   });
 
   item.addEventListener('dragover', (e) => {
@@ -611,6 +645,11 @@ function initDragAndDrop(item, habit) {
     } else {
       inner.insertBefore(dragging, item.nextElementSibling);
     }
+    const allItems = inner.querySelectorAll('.habit-item');
+    allItems.forEach((el, idx) => {
+      const h = findHabit(el.dataset.habitId);
+      if (h) h.order = idx;
+    });
   });
 
   item.addEventListener('drop', (e) => {
@@ -622,8 +661,12 @@ function initDragAndDrop(item, habit) {
 function initMobileReorder(item, habit) {
   const titleInput = item.querySelector('.habit-title');
   if (!titleInput) return;
+  if (window.innerWidth > 768) return;
 
   let startY = 0;
+  let _longPressTimer = null;
+  let _isReordering = false;
+  let _reorderHabitId = null;
 
   const resetReorder = () => {
     item.classList.remove('reordering');
@@ -635,6 +678,7 @@ function initMobileReorder(item, habit) {
   };
 
   titleInput.addEventListener('touchstart', (e) => {
+    if (isTextSelected()) return;
     if (window.innerWidth > 768) return;
     startY = e.touches[0].clientY;
     _longPressTimer = setTimeout(() => {
@@ -648,6 +692,7 @@ function initMobileReorder(item, habit) {
   }, { passive: true });
 
   titleInput.addEventListener('touchmove', (e) => {
+    if (isTextSelected()) return;
     if (!_isReordering || _reorderHabitId !== habit.id) {
       clearTimeout(_longPressTimer);
       return;
@@ -658,12 +703,10 @@ function initMobileReorder(item, habit) {
 
     const inner = habitList.querySelector('.habit-list-inner');
     const items = [...inner.querySelectorAll('.habit-item:not(.reordering)')];
-    const rect = item.getBoundingClientRect();
-    const itemMidY = rect.top + rect.height / 2;
+    const itemMidY = item.getBoundingClientRect().top + item.getBoundingClientRect().height / 2;
 
     for (const other of items) {
-      const otherRect = other.getBoundingClientRect();
-      const otherMidY = otherRect.top + otherRect.height / 2;
+      const otherMidY = other.getBoundingClientRect().top + other.getBoundingClientRect().height / 2;
       if (itemMidY < otherMidY && other.previousElementSibling === item) {
         inner.insertBefore(item, other);
         break;
@@ -678,6 +721,7 @@ function initMobileReorder(item, habit) {
   }, { passive: false });
 
   titleInput.addEventListener('touchend', () => {
+    if (isTextSelected()) return;
     clearTimeout(_longPressTimer);
     if (_isReordering && _reorderHabitId === habit.id) {
       resetReorder();
@@ -686,6 +730,7 @@ function initMobileReorder(item, habit) {
   });
 
   titleInput.addEventListener('touchcancel', () => {
+    if (isTextSelected()) return;
     clearTimeout(_longPressTimer);
     if (_isReordering && _reorderHabitId === habit.id) resetReorder();
   });
@@ -698,16 +743,17 @@ function saveDragOrder() {
     const habit = findHabit(item.dataset.habitId);
     if (habit) {
       habit.order = index;
-      habit.updated_at = Date.now();
+      habit.updatedAt = Date.now();
     }
   });
   saveHabits();
   const changedHabits = [...items].map(item => findHabit(item.dataset.habitId)).filter(Boolean);
+  if (changedHabits.length === 0) return;
   syncMutation(changedHabits);
 }
 
 function saveHabits() {
-  try { localStorage.setItem('habits', JSON.stringify(habits)); } catch {}
+  try { localStorage.setItem('habits', JSON.stringify(habits)); } catch (e) { console.error('saveHabits failed:', e); }
 }
 
 function loadHabits() {
@@ -718,8 +764,12 @@ function loadHabits() {
       ...h,
       completions: Array.isArray(h.completions) ? h.completions : [],
       deleted: h.deleted ?? false,
+      paused: h.paused ?? false,
+      intervalDays: typeof h.intervalDays === 'number' ? h.intervalDays : 1,
+      lastCompletedAt: h.lastCompletedAt || null,
     }));
-  } catch {
+  } catch (e) {
+    console.error('loadHabits failed:', e);
     habits = [];
   }
 }
@@ -729,11 +779,18 @@ function findHabit(id) {
 }
 
 function syncMutation(changedHabits) {
-  if (!Auth.isAuthenticated()) return;
   Sync.pushToServer(changedHabits);
 }
 
 function debouncedSyncMutation(changedHabits) {
   if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
-  _syncDebounceTimer = setTimeout(() => syncMutation(changedHabits), SYNC_DEBOUNCE_MS);
+  changedHabits.forEach(ch => {
+    const idx = _pendingSyncHabits.findIndex(h => h.id === ch.id);
+    if (idx >= 0) _pendingSyncHabits[idx] = ch;
+    else _pendingSyncHabits.push(ch);
+  });
+  _syncDebounceTimer = setTimeout(() => {
+    syncMutation(_pendingSyncHabits);
+    _pendingSyncHabits = [];
+  }, SYNC_DEBOUNCE_MS);
 }

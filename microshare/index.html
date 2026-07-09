@@ -50,9 +50,9 @@
   <input id="fileInput" type="file" multiple hidden />
 
   <button id="settingsIcon" class="settings-icon" aria-label="account">
-    <svg width="30" height="30" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M8 8C9.65685 8 11 6.65685 11 5C11 3.34315 9.65685 2 8 2C6.34315 2 5 3.34315 5 5C5 6.65685 6.34315 8 8 8Z" fill="none" stroke="currentColor" stroke-width="1.5"/>
-      <path d="M3 13C3 11.3431 4.34315 10 6 10H10C11.6569 10 13 11.3431 13 13V14H3V13Z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   </button>
 
@@ -101,7 +101,7 @@
         </div>
         <div class="settings-section">
           <div class="userhash-input-row">
-            <input id="userhashInput" type="text" placeholder="catbox userhash" autocomplete="off" spellcheck="false" />
+            <input id="userhashInput" type="password" placeholder="catbox userhash" autocomplete="off" spellcheck="false" />
           </div>
           <div id="userhashTooltip" class="userhash-tooltip visible">
             an <a href="https://catbox.moe/user/register.php" target="_blank">account</a> is required to upload to <a href="https://catbox.moe" target="_blank">catbox</a> and <a href="https://litterbox.catbox.moe" target="_blank">litterbox</a>. creating an account and entering your <a href="https://catbox.moe/user/manage.php" target="_blank">userhash</a> unlocks some extra features.
@@ -117,6 +117,12 @@
             <span>prefer fileditch</span>
           </label>
         </div>
+        <div class="settings-section">
+          <label class="toggle-row">
+            <input type="checkbox" id="hideDevicesToggle" />
+            <span>hide devices</span>
+          </label>
+        </div>
       </div>
     </div>
   </div>
@@ -127,8 +133,20 @@
 
   <div id="overlay" class="overlay"></div>
 
+  <div id="renameModal" class="rename-modal">
+    <div class="rename-modal-content">
+      <div class="rename-modal-title">rename file</div>
+      <input id="renameInput" type="text" class="rename-modal-input" autocomplete="off" spellcheck="false" />
+      <div class="rename-modal-buttons">
+        <button id="renameCancelBtn" class="rename-modal-btn secondary">cancel</button>
+        <button id="renameConfirmBtn" class="rename-modal-btn">rename</button>
+      </div>
+    </div>
+  </div>
+
   <script src="../shared/auth.js"></script>
   <script src="../shared/sync.js"></script>
+
   <script src="script.js"></script>
 </body>
 </html>

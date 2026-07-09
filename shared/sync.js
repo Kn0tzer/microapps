@@ -1,6 +1,14 @@
 const SyncFactory = (() => {
   function create(config) {
-    const { endpoint, storageKey, maxItems, buildPayload, toLocal, getItems, setItems, render } = config;
+    if (!config || typeof config !== 'object') throw new Error('SyncFactory.create requires a config object');
+    if (typeof config.getItems !== 'function') throw new Error('SyncFactory.create requires getItems function');
+    if (typeof config.setItems !== 'function') throw new Error('SyncFactory.create requires setItems function');
+    if (typeof config.buildPayload !== 'function') throw new Error('SyncFactory.create requires buildPayload function');
+    if (typeof config.toLocal !== 'function') throw new Error('SyncFactory.create requires toLocal function');
+    if (typeof config.render !== 'function') throw new Error('SyncFactory.create requires render function');
+    if (!config.endpoint) throw new Error('SyncFactory.create requires endpoint');
+    if (!config.storageKey) throw new Error('SyncFactory.create requires storageKey');
+    const { endpoint, storageKey, maxItems, maxItemsFilter, buildPayload, toLocal, getItems, setItems, render } = config;
 
     const API_BASE = window.location.origin + '/api';
     const POLL_INTERVAL = 30000;
@@ -10,11 +18,13 @@ const SyncFactory = (() => {
     let _pollTimer = null;
     let _isSyncing = false;
     let _syncEnabled = false;
+    let _syncedOnce = false;
+    let _visibilityHandler = null;
 
     function init() {
       _syncEnabled = Auth.isAuthenticated();
       Auth.onAuthChange((state) => {
-        if (state === 'signed_in' || state === 'refreshed' || state === 'synced') {
+        if (state === 'signed_in' || state === 'synced') {
           _syncEnabled = true;
           _startPolling();
         } else if (state === 'signed_out') {
@@ -33,10 +43,14 @@ const SyncFactory = (() => {
       _pollTimer = setInterval(() => {
         if (_syncEnabled && !_isSyncing) pullFromServer();
       }, POLL_INTERVAL);
-      document.addEventListener('visibilitychange', () => {
+      if (_visibilityHandler) {
+        document.removeEventListener('visibilitychange', _visibilityHandler);
+      }
+      _visibilityHandler = () => {
         if (document.hidden) { _stopPolling(); }
         else if (_syncEnabled) { _startPolling(); pullFromServer(); }
-      });
+      };
+      document.addEventListener('visibilitychange', _visibilityHandler);
     }
 
     function _stopPolling() {
@@ -46,63 +60,61 @@ const SyncFactory = (() => {
       }
     }
 
-    function _initialPullWithRetry(attempt = 0) {
-      if (!Auth.isAuthenticated()) {
-        if (attempt < 10) {
-          setTimeout(() => _initialPullWithRetry(attempt + 1), 500);
-        } else {
-          console.warn('[Sync] initialPullWithRetry failed: not authenticated after 10 attempts');
-        }
-        return;
+    function _initialPullWithRetry() {
+      let attempts = 0;
+      function tryPull() {
+        attempts++;
+        pullFromServer().catch(() => {
+          if (attempts < 3) setTimeout(tryPull, RETRY_DELAY * Math.pow(2, attempts - 1));
+        });
       }
-      pullFromServer();
+      tryPull();
     }
 
-    async function _apiRequest(method, path, body, retryAttempt = 0) {
-      const token = Auth.getToken();
+    async function _apiRequest(method, path, body) {
+      let token = Auth.getToken();
       if (!token) throw new Error('Not authenticated');
 
-      const url = API_BASE + path;
-      const headers = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
-      const options = { method, headers };
-      if (body) options.body = JSON.stringify(body);
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const url = API_BASE + path;
+          const headers = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+          const options = { method, headers };
+          if (body) options.body = JSON.stringify(body);
 
-      try {
-        const response = await fetch(url, options);
+          const response = await fetch(url, options);
 
-        if (!response.ok) {
-          const errorText = await response.text().catch(() => 'unknown');
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => 'unknown');
 
-          if (response.status === 401) {
-            Auth.refreshIdentity();
-            const newToken = Auth.getToken();
-            if (newToken && retryAttempt < 1) {
-              await new Promise(r => setTimeout(r, 500));
-              return _apiRequest(method, path, body, retryAttempt + 1);
+            if (response.status === 401) {
+              Auth.refreshIdentity();
+              token = Auth.getToken();
+              if (token) continue;
+              throw new Error('Auth failed');
             }
-            throw new Error('Auth failed');
+
+            if (response.status >= 500 && attempt < MAX_RETRIES) {
+              await new Promise(r => setTimeout(r, RETRY_DELAY * Math.pow(2, attempt)));
+              continue;
+            }
+
+            throw new Error(`API ${response.status}: ${errorText}`);
           }
 
-          if (response.status >= 500 && retryAttempt < MAX_RETRIES) {
-            await new Promise(r => setTimeout(r, RETRY_DELAY * Math.pow(2, retryAttempt)));
-            return _apiRequest(method, path, body, retryAttempt + 1);
+          return await response.json();
+        } catch (err) {
+          const isNetworkError = err.name === 'TypeError' || err.message?.includes('fetch');
+          if (attempt < MAX_RETRIES && isNetworkError) {
+            await new Promise(r => setTimeout(r, RETRY_DELAY * Math.pow(2, attempt)));
+            continue;
           }
-
-          throw new Error(`API ${response.status}: ${errorText}`);
+          throw err;
         }
-
-        return await response.json();
-      } catch (err) {
-        if (retryAttempt < MAX_RETRIES && err.name !== 'AbortError' && (err.message?.includes('fetch') || err.name === 'TypeError')) {
-          await new Promise(r => setTimeout(r, RETRY_DELAY * Math.pow(2, retryAttempt)));
-          return _apiRequest(method, path, body, retryAttempt + 1);
-        }
-        console.error('[Sync] API request failed:', err);
-        throw err;
       }
     }
 
-    function _buildPayload(items) {
+    function _serializePayload(items) {
       return {
         [endpoint]: items.map(item => ({
           id: String(item.id),
@@ -114,9 +126,9 @@ const SyncFactory = (() => {
       };
     }
 
-    function _toLocal(serverItem) {
+    function _deserializeItem(serverItem) {
       return {
-        id: Number(serverItem.id) || serverItem.id,
+        id: serverItem.id != null ? String(serverItem.id) : '',
         ...toLocal(serverItem),
         updated_at: serverItem.updated_at,
         deleted: serverItem.deleted || false,
@@ -127,6 +139,7 @@ const SyncFactory = (() => {
     function _merge(localItems, serverItems) {
       const merged = new Map();
       const serverMap = new Map(serverItems.map(si => [String(si.id), si]));
+      const localDeletedIds = new Set(localItems.filter(li => li.deleted).map(li => String(li.id)));
 
       for (const li of localItems) {
         const id = String(li.id);
@@ -137,14 +150,14 @@ const SyncFactory = (() => {
         } else if (!serverItem.deleted && serverItem.updated_at <= (li.updated_at || 0)) {
           merged.set(id, li);
         } else if (!serverItem.deleted) {
-          merged.set(id, _toLocal(serverItem));
+          merged.set(id, _deserializeItem(serverItem));
         }
       }
 
       for (const si of serverItems) {
         const id = String(si.id);
-        if (!merged.has(id) && !si.deleted) {
-          merged.set(id, _toLocal(si));
+        if (!merged.has(id) && !si.deleted && !localDeletedIds.has(id)) {
+          merged.set(id, _deserializeItem(si));
         }
       }
 
@@ -152,58 +165,58 @@ const SyncFactory = (() => {
     }
 
     function _saveLocal(items) {
-      try { localStorage.setItem(storageKey, JSON.stringify(items)); } catch {}
+      try { localStorage.setItem(storageKey, JSON.stringify(items)); } catch (e) { console.error('sync: failed to save to localStorage', e); }
     }
 
     async function pullFromServer() {
       if (!_syncEnabled || _isSyncing) return;
       _isSyncing = true;
-      let pullFailed = true;
 
       try {
         const data = await _apiRequest('GET', `/${endpoint}`);
-        pullFailed = false;
         const serverItems = data[endpoint] || [];
         let merged = _merge(getItems(), serverItems);
 
         if (maxItems) {
-          const isCompleted = t => (t.completed !== undefined ? t.completed : false);
-          const completed = merged.filter(t => isCompleted(t) && !t.deleted);
+          const filterFn = typeof maxItemsFilter === 'function' ? maxItemsFilter : t => (t.completed !== undefined ? t.completed : false) && !t.deleted;
+          const completed = merged.filter(filterFn);
           if (completed.length > maxItems) {
             const toKeep = [...completed].sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0)).slice(0, maxItems);
             const toWipe = completed.filter(t => !toKeep.includes(t));
             if (toWipe.length > 0) {
               try {
-                const wipeData = await _apiRequest('POST', `/${endpoint}`, _buildPayload(toWipe.map(t => ({ ...t, deleted: true, updated_at: Date.now() }))));
+                const wipeData = await _apiRequest('POST', `/${endpoint}`, _serializePayload(toWipe.map(t => ({ ...t, deleted: true, updated_at: Date.now() }))));
                 merged = _merge(merged, wipeData[endpoint] || []);
-              } catch {}
+              } catch (e) { console.error('sync: failed to wipe excess items', e); }
             }
-            merged = [...merged.filter(t => !isCompleted(t) || t.deleted), ...toKeep];
+            merged = [...merged.filter(t => !(t.completed !== undefined ? t.completed : false) || t.deleted), ...toKeep];
           }
         }
 
-        const serverIds = new Set(serverItems.map(si => String(si.id)));
-        const localOnly = merged.filter(si => !serverIds.has(String(si.id)));
-        if (localOnly.length > 0) {
-          try {
-            const pushData = await _apiRequest('POST', `/${endpoint}`, _buildPayload(localOnly));
-            merged = _merge(merged, pushData[endpoint] || []);
-          } catch {}
+        if (!_syncedOnce) {
+          const serverIds = new Set(serverItems.map(si => String(si.id)));
+          const localOnly = merged.filter(si => !serverIds.has(String(si.id)));
+          if (localOnly.length > 0) {
+            try {
+              const pushData = await _apiRequest('POST', `/${endpoint}`, _serializePayload(localOnly));
+              merged = _merge(merged, pushData[endpoint] || []);
+            } catch (e) { console.error('sync: failed to push local items on initial sync', e); }
+          }
+          _syncedOnce = true;
         }
 
         setItems(merged);
         _saveLocal(merged);
         render();
-      } catch {} finally {
-        if (pullFailed) {
-          try {
-            const merged = getItems();
-            const localOnly = merged.filter(si => !si.deleted);
-            if (localOnly.length > 0) {
-              await _apiRequest('POST', `/${endpoint}`, _buildPayload(localOnly));
-            }
-          } catch {}
-        }
+      } catch (e) {
+        console.error('sync: pull failed', e);
+        try {
+          const localOnly = getItems().filter(si => !si.deleted);
+          if (localOnly.length > 0) {
+            await _apiRequest('POST', `/${endpoint}`, _serializePayload(localOnly));
+          }
+        } catch (e2) { console.error('sync: fallback push after pull failure failed', e2); }
+      } finally {
         _isSyncing = false;
       }
     }
@@ -212,11 +225,11 @@ const SyncFactory = (() => {
       if (!_syncEnabled || !changedItems?.length) return;
 
       try {
-        const data = await _apiRequest('POST', `/${endpoint}`, _buildPayload(changedItems));
+        const data = await _apiRequest('POST', `/${endpoint}`, _serializePayload(changedItems));
         setItems(_merge(getItems(), data[endpoint] || []));
         _saveLocal(getItems());
         render();
-      } catch (err) { console.error('[Sync] pushToServer failed:', err); }
+      } catch (e) { console.error('sync: push failed', e); }
     }
 
     return { init, pullFromServer, pushToServer };

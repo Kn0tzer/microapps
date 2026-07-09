@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="style.css" />
   <script src="https://shoo.dev/shoo.js" defer></script>
   <meta name="theme-color" content="#000000" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://shoo.dev; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src 'self' https://shoo.dev https://microapps.work.gd; img-src 'self' data:; base-uri 'self'; form-action 'self'" />
 </head>
 <body>
   <div class="left-panel" id="leftPanel">
@@ -46,11 +47,9 @@
       <div id="editorEmptyState" class="editor-empty-state">
         <p>no note selected</p>
         <button id="settingsIcon" class="settings-icon" aria-label="account">
-          <svg width="30" height="30" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M8 8C9.65685 8 11 6.65685 11 5C11 3.34315 9.65685 2 8 2C6.34315 2 5 3.34315 5 5C5 6.65685 6.34315 8 8 8Z" fill="none"/>
-            <path d="M8 8C9.65685 8 11 6.65685 11 5C11 3.34315 9.65685 2 8 2C6.34315 2 5 3.34315 5 5C5 6.65685 6.34315 8 8 8Z" stroke="currentColor" stroke-width="1"/>
-            <path d="M3 13C3 11.3431 4.34315 10 6 10H10C11.6569 10 13 11.3431 13 13V14H3V13Z" fill="none"/>
-            <path d="M3 13C3 11.3431 4.34315 10 6 10H10C11.6569 10 13 11.3431 13 13V14H3V13Z" stroke="currentColor" stroke-width="1"/>
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
       </div>
@@ -58,7 +57,6 @@
         <div class="editor-header">
           <input id="noteTitle" class="note-title" type="text" placeholder="untitled note" autocomplete="off" />
           <div class="editor-actions">
-            <span id="noteTimestamp" class="note-timestamp"></span>
             <button id="fullscreenButton" class="action-button fullscreen-btn" aria-label="fullscreen">
               <span class="fullscreen-icons">
                 <svg class="fullscreen-icon-enter" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -75,11 +73,7 @@
                 </svg>
               </span>
             </button>
-            <button id="deleteNoteButton" class="action-button delete-note-btn" aria-label="delete note" style="display:none">
-              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 4H14M6 4V2H10V4M5 7V13M8 7V13M11 7V13M3 4L4 14H12L13 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
+            <button id="deleteNoteButton" class="action-button delete-note-btn" aria-label="delete note" style="display:none"></button>
             <button id="restoreNoteButton" class="action-button restore-note-btn" aria-label="restore note" style="display:none">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12C21 16.9706 16.9706 21 12 21C8.5 21 5.5 19 4 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -131,9 +125,10 @@
 
   <div id="overlay" class="overlay"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" integrity="sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+" crossorigin="anonymous"></script>
   <script src="../shared/auth.js"></script>
   <script src="../shared/sync.js"></script>
+
   <script src="script.js"></script>
 </body>
 </html>

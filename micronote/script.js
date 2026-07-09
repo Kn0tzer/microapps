@@ -5,7 +5,7 @@ let notesListInner, editorPanel, noteTitle, noteEditor, notePreview, previewTogg
 let editorContent, editorEmptyState, editorStage;
 let settingsIcon, settingsOverlay;
 let addNoteButton, deleteNoteButton, restoreNoteButton, closeEditorBtn;
-let fullscreenButton, noteTimestamp;
+let fullscreenButton;
 let archivedHeader, archivedList;
 let signInBtn, signOutBtn;
 let overlay;
@@ -15,19 +15,17 @@ let resizeHandle;
 
 let _syncDebounceTimer = null;
 const SYNC_DEBOUNCE_MS = 500;
-let _signingOut = false;
 
-let _draggedNote = null;
-let _draggedEl = null;
+const RESTORE_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21 L12 12 M12 12 L15 15.3333 M12 12 L9 15.3333" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.5 7 V13 C20.5 16.7712 20.5 18.6569 19.3284 19.8284 C18.1569 21 16.2712 21 12.5 21 H11.5 C7.72876 21 5.84315 21 4.67157 19.8284 C3.5 18.6569 3.5 16.7712 3.5 13 V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 5 C2 4.05719 2 3.58579 2.29289 3.29289 C2.58579 3 3.05719 3 4 3 H20 C20.9428 3 21.4142 3 21.7071 3.29289 C22 3.58579 22 4.05719 22 5 C22 5.94281 C22 6.82863 21.4142 7.20712 20.9428 7.5 C20.4714 7.79288 20 7.5 20 7.5 H4 C4 7.5 3.5286 7.79288 3.05719 7.5 C2.58579 7.20712 2 6.82863 2 5 Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+const DELETE_SVG = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4 H14 M6 4 V2 H10 V4 M5 7 V13 M8 7 V13 M11 7 V13 M3 4 L4 14 H12 L13 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ARCHIVE_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.5 7 V13 C20.5 16.7712 20.5 18.6569 19.3284 19.8284 C18.1569 21 16.2712 21 12.5 21 H11.5 C7.72876 21 5.84315 21 4.67157 19.8284 C3.5 18.6569 3.5 16.7712 3.5 13 V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 5 C2 4.05719 2 3.58579 2.29289 3.29289 C2.58579 3 3.05719 3 4 3 H20 C20.9428 3 21.4142 3 21.7071 3.29289 C22 3.58579 22 4.05719 22 5 C22 5.94281 C22 6.82863 21.4142 7.20712 20.9428 7.5 C20.4714 7.79288 20 7.5 20 7.5 H4 C4 7.5 3.5286 7.79288 3.05719 7.5 C2.58579 7.20712 2 6.82863 2 5 Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+
 let _longPressTimer = null;
 let _isReordering = false;
 let _reorderNoteId = null;
+let _addingNote = false;
 
-let _previewMode = false;
-
-const ARCHIVE_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.5 7V13C20.5 16.7712 20.5 18.6569 19.3284 19.8284C18.1569 21 16.2712 21 12.5 21H11.5C7.72876 21 5.84315 21 4.67157 19.8284C3.5 18.6569 3.5 16.7712 3.5 13V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 5C2 4.05719 2 3.58579 2.29289 3.29289C2.58579 3 3.05719 3 4 3H20C20.9428 3 21.4142 3 21.7071 3.29289C22 3.58579 22 4.05719 22 5C22 5.94281 22 6.41421 21.7071 6.70711C21.4142 7 20.9428 7 20 7H4C3.05719 7 2.58579 7 2.29289 6.70711C2 6.41421 2 5.94281 2 5Z" stroke="currentColor" stroke-width="1.5"/><path d="M12 7L12 16M12 16L15 12.6667M12 16L9 12.6667" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const DELETE_SVG = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4H14M6 4V2H10V4M5 7V13M8 7V13M11 7V13M3 4L4 14H12L13 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const RESTORE_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21L12 12M12 12L15 15.3333M12 12L9 15.3333" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.5 7V13C20.5 16.7712 20.5 18.6569 19.3284 19.8284C18.1569 21 16.2712 21 12.5 21H11.5C7.72876 21 5.84315 21 4.67157 19.8284C3.5 18.6569 3.5 16.7712 3.5 13V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 5C2 4.05719 2 3.58579 2.29289 3.29289C2.58579 3 3.05719 3 4 3H20C20.9428 3 21.4142 3 21.7071 3.29289C22 3.58579 22 4.05719 22 5C22 5.94281 22 6.41421 21.7071 6.70711C21.4142 7 20.9428 7 20 7H4C3.05719 7 2.58579 7 2.29289 6.70711C2 6.41421 2 5.94281 2 5Z" stroke="currentColor" stroke-width="1.5"/></svg>';
+let previewMode = false;
 
 document.addEventListener('DOMContentLoaded', () => {
   notesListInner = document.getElementById('notesListInner');
@@ -46,7 +44,6 @@ document.addEventListener('DOMContentLoaded', () => {
   restoreNoteButton = document.getElementById('restoreNoteButton');
   closeEditorBtn = document.getElementById('closeEditor');
   fullscreenButton = document.getElementById('fullscreenButton');
-  noteTimestamp = document.getElementById('noteTimestamp');
   archivedHeader = document.getElementById('archivedHeader');
   archivedList = document.getElementById('archivedList');
   signInBtn = document.getElementById('signInBtn');
@@ -58,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
   leftPanel = document.getElementById('leftPanel');
   resizeHandle = document.getElementById('resizeHandle');
 
-  loadData();
+  loadNotes();
   renderNotes();
   attachEventListeners();
   Sync = SyncFactory.create({
@@ -80,10 +77,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   Sync.init();
   updateAuthUI();
-  Auth.onAuthChange(() => {
-    if (!_signingOut) updateAuthUI();
-  });
-  setEditorStage('empty');
+  Auth.onAuthChange(() => updateAuthUI());
+  editorContent.classList.remove('active');
+  editorEmptyState.classList.remove('inactive');
+  deleteNoteButton.innerHTML = DELETE_SVG;
 });
 
 function attachEventListeners() {
@@ -99,16 +96,8 @@ function attachEventListeners() {
 
   signInBtn.addEventListener('click', () => Auth.signIn());
   signOutBtn.addEventListener('click', () => {
-    _signingOut = true;
-    signOutBtn.textContent = 'sign out successful';
-    signOutBtn.disabled = true;
     Auth.signOut();
-    setTimeout(() => {
-      _signingOut = false;
-      signOutBtn.textContent = 'sign out';
-      signOutBtn.disabled = false;
-      updateAuthUI();
-    }, 3000);
+    updateAuthUI();
   });
 
   noteTitle.addEventListener('input', (e) => {
@@ -149,17 +138,14 @@ function attachEventListeners() {
     }
   });
 
-  initResizeHandle();
-}
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'micronote_notes') {
+      loadNotes();
+      renderNotes();
+    }
+  });
 
-function setEditorStage(stage) {
-  if (stage === 'editor') {
-    editorContent.classList.add('active');
-    editorEmptyState.classList.add('inactive');
-  } else {
-    editorContent.classList.remove('active');
-    editorEmptyState.classList.remove('inactive');
-  }
+  initResizeHandle();
 }
 
 function handleEditorInput() {
@@ -169,41 +155,45 @@ function handleEditorInput() {
   note.content = noteEditor.value;
   note.updated_at = Date.now();
   saveNotes();
-  debouncedSyncMutation([note]);
-  updateNoteTimestamp(note);
-  if (_previewMode) renderPreview();
+  debouncedPushSync([note]);
+  if (previewMode) renderPreview();
 }
 
 function initResizeHandle() {
   let isResizing = false;
+
+  const onResize = (e) => {
+    if (!isResizing) return;
+    const newWidth = e.clientX;
+    if (newWidth >= 200 && newWidth <= window.innerWidth - 200) {
+      leftPanel.style.width = newWidth + 'px';
+    }
+  };
+
+  const onUp = () => {
+    if (isResizing) {
+      isResizing = false;
+      resizeHandle.classList.remove('active');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onResize);
+      document.removeEventListener('mouseup', onUp);
+    }
+  };
 
   resizeHandle.addEventListener('mousedown', (e) => {
     isResizing = true;
     resizeHandle.classList.add('active');
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onResize);
+    document.addEventListener('mouseup', onUp);
     e.preventDefault();
-  });
-
-  document.addEventListener('mousemove', (e) => {
-    if (!isResizing) return;
-    const newWidth = e.clientX;
-    if (newWidth >= 200 && newWidth <= window.innerWidth - 200) {
-      leftPanel.style.width = newWidth + 'px';
-    }
-  });
-
-  document.addEventListener('mouseup', () => {
-    if (isResizing) {
-      isResizing = false;
-      resizeHandle.classList.remove('active');
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    }
   });
 }
 
 function handleAddNote() {
+  if (_addingNote) return;
   if (window.innerWidth <= 768) {
     mobileNewNoteModal.classList.add('visible');
     mobileNoteInput.value = '';
@@ -225,16 +215,22 @@ function submitMobileNote() {
 }
 
 function generateId() {
-  const arr = new Uint8Array(8);
-  crypto.getRandomValues(arr);
-  let id = '';
-  for (let i = 0; i < arr.length; i++) {
-    id += arr[i].toString(36).padStart(2, '0');
+  try {
+    const arr = new Uint8Array(8);
+    crypto.getRandomValues(arr);
+    let id = '';
+    for (let i = 0; i < arr.length; i++) {
+      id += arr[i].toString(36).padStart(2, '0');
+    }
+    return id + Date.now().toString(36);
+  } catch {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
   }
-  return id + Date.now().toString(36);
 }
 
 function addNote(title) {
+  if (_addingNote) return;
+  _addingNote = true;
   const minOrder = notes.length ? Math.min(...notes.map(n => n.order ?? 0)) : 0;
   const note = {
     id: generateId(),
@@ -248,29 +244,30 @@ function addNote(title) {
   };
   notes.push(note);
   saveNotes();
-  syncMutation([note]);
+  Sync.pushToServer([note]);
   renderNotes();
   openNote(note.id);
   if (!title) {
     setTimeout(() => noteTitle.focus(), 50);
   }
+  setTimeout(() => { _addingNote = false; }, 300);
 }
 
 function animateAndExecute(noteId, action) {
   const note = findNote(noteId);
   if (!note) return;
   const el = document.querySelector(`[data-note-id="${noteId}"]`);
-  if (el) {
-    el.classList.add('removing');
-    el.addEventListener('animationend', () => {
-      action(note);
-      if (currentNoteId === noteId) closeEditorPanel();
-      renderNotes();
-    }, { once: true });
-  } else {
+  const execute = () => {
     action(note);
     if (currentNoteId === noteId) closeEditorPanel();
     renderNotes();
+  };
+  if (el) {
+    el.classList.add('removing');
+    el.addEventListener('animationend', () => execute(), { once: true });
+    setTimeout(execute, 600);
+  } else {
+    execute();
   }
 }
 
@@ -279,7 +276,7 @@ function archiveNote(noteId) {
     note.archived = true;
     note.updated_at = Date.now();
     saveNotes();
-    syncMutation([note]);
+    Sync.pushToServer([note]);
   });
 }
 
@@ -288,18 +285,17 @@ function permanentlyDeleteNote(noteId) {
     note.deleted = true;
     note.updated_at = Date.now();
     saveNotes();
-    syncMutation([note]);
+    Sync.pushToServer([note]);
   });
 }
 
 function restoreNote(noteId) {
-  const note = findNote(noteId);
-  if (!note) return;
-  note.archived = false;
-  note.updated_at = Date.now();
-  saveNotes();
-  syncMutation([note]);
-  renderNotes();
+  animateAndExecute(noteId, (note) => {
+    note.archived = false;
+    note.updated_at = Date.now();
+    saveNotes();
+    Sync.pushToServer([note]);
+  });
 }
 
 function updateNoteTitle(noteId, title) {
@@ -308,7 +304,7 @@ function updateNoteTitle(noteId, title) {
   note.title = title;
   note.updated_at = Date.now();
   saveNotes();
-  debouncedSyncMutation([note]);
+  debouncedPushSync([note]);
   const listItem = document.querySelector(`.note-item[data-note-id="${noteId}"] .note-item-title`);
   if (listItem) listItem.textContent = title || '';
 }
@@ -318,25 +314,25 @@ function openNote(noteId) {
   if (!note) return;
   const previousNoteId = currentNoteId;
   currentNoteId = noteId;
-  setEditorStage('editor');
+  editorContent.classList.add('active');
+  editorEmptyState.classList.add('inactive');
   noteTitle.value = note.title || '';
   noteEditor.value = note.content || '';
-  if (_previewMode) {
+  if (previewMode) {
     renderPreview();
   } else {
     noteEditor.style.display = 'block';
     notePreview.style.display = 'none';
   }
   updateEditorButtons();
-  updateNoteTimestamp(note);
-  
+
   if (previousNoteId !== null && previousNoteId !== noteId) {
     const prevItem = document.querySelector(`.note-item[data-note-id="${previousNoteId}"]`);
     if (prevItem) prevItem.classList.remove('selected');
   }
   const currItem = document.querySelector(`.note-item[data-note-id="${noteId}"]`);
   if (currItem) currItem.classList.add('selected');
-  
+
   if (window.innerWidth <= 768) {
     editorPanel.classList.add('open');
     leftPanel.classList.add('hidden');
@@ -356,10 +352,10 @@ function closeEditorPanel() {
   noteTitle.value = '';
   noteEditor.value = '';
   notePreview.innerHTML = '';
-  noteTimestamp.textContent = '';
-  setEditorStage('empty');
+  editorContent.classList.remove('active');
+  editorEmptyState.classList.remove('inactive');
   updateEditorButtons();
-  
+
   if (previousNoteId !== null) {
     const prevItem = document.querySelector(`.note-item[data-note-id="${previousNoteId}"]`);
     if (prevItem) prevItem.classList.remove('selected');
@@ -371,8 +367,8 @@ function toggleFullscreen() {
 }
 
 function togglePreview() {
-  _previewMode = !_previewMode;
-  if (_previewMode) {
+  previewMode = !previewMode;
+  if (previewMode) {
     renderPreview();
     noteEditor.style.display = 'none';
     notePreview.style.display = 'block';
@@ -388,16 +384,23 @@ function togglePreview() {
 }
 
 function sanitizeHtml(html) {
-  const d = document.createElement('div');
-  d.innerHTML = html;
-  const scripts = d.querySelectorAll('script, iframe, object, embed');
-  for (const el of scripts) el.remove();
-  for (const el of d.querySelectorAll('*')) {
-    for (const attr of el.attributes) {
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  const body = doc.body;
+  for (const el of body.querySelectorAll('script, iframe, object, embed, link, style')) {
+    el.remove();
+  }
+  for (const el of body.querySelectorAll('*')) {
+    for (const attr of [...el.attributes]) {
       if (attr.name.startsWith('on')) el.removeAttribute(attr.name);
     }
+    for (const attr of ['href', 'action', 'src', 'xlink:href']) {
+      const val = el.getAttribute(attr);
+      if (val && /^\s*javascript\s*:/i.test(val)) {
+        el.removeAttribute(attr);
+      }
+    }
   }
-  return d.innerHTML;
+  return body.innerHTML;
 }
 
 function renderPreview() {
@@ -406,7 +409,6 @@ function renderPreview() {
     notePreview.innerHTML = sanitizeHtml(marked.parse(noteEditor.value || '', { breaks: true, gfm: true }));
   } catch (e) {
     notePreview.textContent = noteEditor.value || '';
-    console.warn('[micronote] Markdown render failed, showing raw text');
   }
 }
 
@@ -415,22 +417,10 @@ function updateEditorButtons() {
   if (!note) {
     deleteNoteButton.style.display = 'none';
     restoreNoteButton.style.display = 'none';
-    noteTimestamp.textContent = '';
     return;
   }
-  if (note.archived) {
-    deleteNoteButton.style.display = 'flex';
-    restoreNoteButton.style.display = 'flex';
-  } else {
-    deleteNoteButton.style.display = 'none';
-    restoreNoteButton.style.display = 'none';
-  }
-  updateNoteTimestamp(note);
-}
-
-function updateNoteTimestamp(note) {
-  if (!note || !noteTimestamp) return;
-  noteTimestamp.textContent = formatTime(note.updated_at);
+  deleteNoteButton.style.display = note.archived ? 'flex' : 'none';
+  restoreNoteButton.style.display = note.archived ? 'flex' : 'none';
 }
 
 function openSettings() {
@@ -450,7 +440,6 @@ function closeAllOverlays() {
 }
 
 function updateAuthUI() {
-  if (!signInBtn || !signOutBtn) return;
   if (Auth.isAuthenticated()) {
     signInBtn.style.display = 'none';
     signOutBtn.style.display = 'block';
@@ -470,12 +459,22 @@ function renderNotes() {
 
   const active = notes.filter(n => !n.deleted && !n.archived)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  active.forEach(n => notesListInner.appendChild(createNoteElement(n)));
+  const fragment = document.createDocumentFragment();
+  active.forEach(n => fragment.appendChild(createNoteElement(n)));
+  notesListInner.appendChild(fragment);
 
   const archived = notes.filter(n => !n.deleted && n.archived)
     .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
   archivedList.innerHTML = '';
-  archived.forEach(n => archivedList.appendChild(createNoteElement(n)));
+  const archivedSection = document.getElementById('archivedSection');
+  if (archived.length === 0) {
+    archivedHeader.style.display = 'none';
+    if (archivedSection) archivedSection.style.display = 'none';
+  } else {
+    archivedHeader.style.display = 'flex';
+    if (archivedSection) archivedSection.style.display = 'block';
+    archived.forEach(n => archivedList.appendChild(createNoteElement(n)));
+  }
 
   refreshOpenEditorIfStale();
 }
@@ -490,13 +489,24 @@ function refreshOpenEditorIfStale() {
   if (noteEditor.value === content && noteTitle.value === title) return;
   noteTitle.value = title;
   noteEditor.value = content;
-  if (_previewMode) {
+  if (previewMode) {
     renderPreview();
   } else {
     const len = noteEditor.value.length;
     noteEditor.setSelectionRange(len, len);
   }
-  updateNoteTimestamp(note);
+}
+
+function createActionButton(svg, action) {
+  const btn = document.createElement('button');
+  btn.className = 'action-button';
+  btn.draggable = false;
+  btn.innerHTML = svg;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    action();
+  });
+  return btn;
 }
 
 function createNoteElement(note) {
@@ -519,35 +529,10 @@ function createNoteElement(note) {
   const actions = document.createElement('div');
   actions.className = 'note-item-actions';
   if (note.archived) {
-    const restoreBtn = document.createElement('button');
-    restoreBtn.className = 'action-button';
-    restoreBtn.draggable = false;
-    restoreBtn.innerHTML = RESTORE_SVG;
-    restoreBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      restoreNote(note.id);
-    });
-    actions.appendChild(restoreBtn);
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'action-button';
-    deleteBtn.draggable = false;
-    deleteBtn.innerHTML = DELETE_SVG;
-    deleteBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      permanentlyDeleteNote(note.id);
-    });
-    actions.appendChild(deleteBtn);
+    actions.appendChild(createActionButton(RESTORE_SVG, () => restoreNote(note.id)));
+    actions.appendChild(createActionButton(DELETE_SVG, () => permanentlyDeleteNote(note.id)));
   } else {
-    const archiveBtn = document.createElement('button');
-    archiveBtn.className = 'action-button';
-    archiveBtn.draggable = false;
-    archiveBtn.innerHTML = ARCHIVE_SVG;
-    archiveBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      archiveNote(note.id);
-    });
-    actions.appendChild(archiveBtn);
+    actions.appendChild(createActionButton(ARCHIVE_SVG, () => archiveNote(note.id)));
   }
   item.appendChild(actions);
 
@@ -566,8 +551,12 @@ function createNoteElement(note) {
 function initDragAndDrop(item, note) {
   item.draggable = true;
   item.addEventListener('dragstart', (e) => {
-    _draggedNote = note;
-    _draggedEl = item;
+    if (window.getSelection() && window.getSelection().toString().length > 0) {
+      e.preventDefault();
+      item.draggable = false;
+      setTimeout(() => item.draggable = true, 0);
+      return;
+    }
     item.classList.add('dragging');
     document.body.classList.add('dragging-in-progress');
     document.body.style.cursor = 'move';
@@ -579,32 +568,31 @@ function initDragAndDrop(item, note) {
     item.classList.remove('dragging');
     document.body.classList.remove('dragging-in-progress');
     document.body.style.cursor = '';
-    _draggedNote = null;
-    _draggedEl = null;
+    saveDragOrder();
   });
 
   item.addEventListener('dragover', (e) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    if (!_draggedNote || _draggedNote.id === note.id) return;
+    const dragging = document.querySelector('.dragging');
+    if (!dragging) return;
     const rect = item.getBoundingClientRect();
     const midY = rect.top + rect.height / 2;
     if (e.clientY < midY) {
-      notesListInner.insertBefore(_draggedEl, item);
+      notesListInner.insertBefore(dragging, item);
     } else {
-      notesListInner.insertBefore(_draggedEl, item.nextElementSibling);
+      notesListInner.insertBefore(dragging, item.nextElementSibling);
     }
   });
 
   item.addEventListener('drop', (e) => {
     e.preventDefault();
-    saveDragOrder();
   });
 }
 
 function initMobileReorder(item, note) {
-  if (note.archived) return;
   let startY = 0;
+  let reorderStartY = 0;
 
   const resetReorder = () => {
     item.classList.remove('reordering');
@@ -618,6 +606,7 @@ function initMobileReorder(item, note) {
   item.addEventListener('touchstart', (e) => {
     if (window.innerWidth > 768) return;
     startY = e.touches[0].clientY;
+    reorderStartY = e.touches[0].clientY;
     _longPressTimer = setTimeout(() => {
       _isReordering = true;
       _reorderNoteId = note.id;
@@ -638,22 +627,24 @@ function initMobileReorder(item, note) {
     item.style.transform = `translateY(${deltaY}px)`;
 
     const items = [...notesListInner.querySelectorAll('.note-item:not(.reordering)')];
-    const rect = item.getBoundingClientRect();
-    const itemMidY = rect.top + rect.height / 2;
+    const itemRect = item.getBoundingClientRect();
+    const itemMidY = itemRect.top + itemRect.height / 2;
 
+    let bestTarget = null;
+    let bestPos = null;
     for (const other of items) {
       const otherRect = other.getBoundingClientRect();
       const otherMidY = otherRect.top + otherRect.height / 2;
-      if (itemMidY < otherMidY && other.previousElementSibling === item) {
-        notesListInner.insertBefore(item, other);
-        break;
-      } else if (itemMidY > otherMidY && other.nextElementSibling && other.nextElementSibling !== item) {
-        notesListInner.insertBefore(item, other.nextElementSibling);
-        break;
-      } else if (itemMidY > otherMidY && !other.nextElementSibling) {
-        notesListInner.appendChild(item);
+      if (itemMidY < otherMidY) {
+        bestTarget = other;
+        bestPos = 'before';
         break;
       }
+    }
+    if (bestTarget) {
+      notesListInner.insertBefore(item, bestTarget);
+    } else {
+      notesListInner.appendChild(item);
     }
   }, { passive: false });
 
@@ -673,53 +664,49 @@ function initMobileReorder(item, note) {
 
 function saveDragOrder() {
   const items = notesListInner.querySelectorAll('.note-item');
+  const noteMap = new Map(notes.map(n => [n.id, n]));
+  let changed = [];
   items.forEach((item, index) => {
-    const note = findNote(Number(item.dataset.noteId));
-    if (note) {
+    const note = noteMap.get(item.dataset.noteId);
+    if (note && note.order !== index) {
       note.order = index;
       note.updated_at = Date.now();
+      changed.push(note);
     }
   });
-  saveNotes();
-  const changed = [...items].map(item => findNote(Number(item.dataset.noteId))).filter(Boolean);
-  syncMutation(changed);
-}
-
-function formatTime(ts) {
-  if (!ts) return '';
-  const diff = Date.now() - ts;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return '1m';
-  if (mins < 60) return mins + 'm';
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return hrs + 'h';
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return days + 'd';
-  const d = new Date(ts);
-  return (d.getMonth() + 1) + '/' + d.getDate();
+  if (changed.length > 0) {
+    saveNotes();
+    Sync.pushToServer(changed);
+  }
 }
 
 function saveNotes() {
-  try { localStorage.setItem('micronote_notes', JSON.stringify(notes)); } catch {}
+  try {
+    localStorage.setItem('micronote_notes', JSON.stringify(notes));
+  } catch (e) {
+    console.error('micronote: failed to save notes to localStorage', e);
+  }
 }
 
-function loadData() {
+function loadNotes() {
   try {
     const raw = localStorage.getItem('micronote_notes');
     notes = raw ? JSON.parse(raw) : [];
-  } catch { notes = []; }
+    const cutoff = Date.now() - 7 * 86400000;
+    const before = notes.length;
+    notes = notes.filter(n => !n.deleted || (n.updated_at || 0) >= cutoff);
+    if (notes.length < before) saveNotes();
+  } catch (e) {
+    console.error('micronote: failed to load notes from localStorage', e);
+    notes = [];
+  }
 }
 
 function findNote(id) {
   return notes.find(n => n.id === id);
 }
 
-function syncMutation(changedNotes) {
-  if (!Auth.isAuthenticated()) return;
-  Sync.pushToServer(changedNotes);
-}
-
-function debouncedSyncMutation(changedNotes) {
+function debouncedPushSync(changedNotes) {
   if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
-  _syncDebounceTimer = setTimeout(() => syncMutation(changedNotes), SYNC_DEBOUNCE_MS);
+  _syncDebounceTimer = setTimeout(() => Sync.pushToServer(changedNotes), SYNC_DEBOUNCE_MS);
 }

@@ -4,7 +4,7 @@ let currentTaskId = null;
 let taskList, completedList, addButton, sidebar, overlay, closeSidebarBtn;
 let sidebarTitle, taskDescription, completedHeader, settingsIcon;
 let settingsOverlay, addSubtaskButton, subtasksList;
-let signInBtn, signOutBtn;
+let signInBtn, signOutBtn, userIdDisplay, toggleUserId;
 let mobileTaskModal, mobileTaskInput, mobileTaskSubmit;
 let sidebarResizeHandle;
 let taskListInner;
@@ -19,9 +19,17 @@ let _isReordering = false;
 let _reorderTaskId = null;
 let _animationInProgress = false;
 
+let Sync = null;
+
 const TITLE_MAX_LENGTH = 200;
 const DESCRIPTION_MAX_LENGTH = 1000;
 const SUBTASK_TITLE_MAX_LENGTH = 200;
+
+const OWNER_USER_ID = 'ps_901bade06281849d45bb4abf2a47599aa38ef34fd7e9101e8427fbc1a7c71828';
+
+function canEdit() {
+  return Auth.isAuthenticated() && Auth.getUserId() === OWNER_USER_ID;
+}
 
 function showToast(msg) {
   const el = document.createElement('div');
@@ -37,13 +45,17 @@ function showToast(msg) {
   setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 3000);
 }
 
-function debounceSync(task) {
-  if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
-  _syncDebounceTimer = setTimeout(() => Sync.pushToServer([task]), SYNC_DEBOUNCE_MS);
-}
-
 function validateString(val, maxLen) {
   return typeof val === 'string' && val.length <= maxLen;
+}
+
+function syncMutation(changedTasks) {
+  if (Sync) Sync.pushToServer(changedTasks);
+}
+
+function debouncedSyncMutation(changedTasks) {
+  if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
+  _syncDebounceTimer = setTimeout(() => syncMutation(changedTasks), SYNC_DEBOUNCE_MS);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -63,6 +75,8 @@ document.addEventListener('DOMContentLoaded', () => {
   subtasksList = document.getElementById('subtasksList');
   signInBtn = document.getElementById('signInBtn');
   signOutBtn = document.getElementById('signOutBtn');
+  userIdDisplay = document.getElementById('userIdDisplay');
+  toggleUserId = document.getElementById('toggleUserId');
   mobileTaskModal = document.getElementById('mobileTaskModal');
   mobileTaskInput = document.getElementById('mobileTaskInput');
   mobileTaskSubmit = document.getElementById('mobileTaskSubmit');
@@ -74,30 +88,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
   completedList.classList.add('collapsed');
 
-  Sync = SyncFactory.create({
-    endpoint: 'tasks',
-    storageKey: 'tasks',
-    maxItems: 10,
-    getItems: () => tasks,
-    setItems: (v) => { tasks = v; },
-    buildPayload: (t) => ({
-      title: t.title || '',
-      description: t.description || '',
-      completed: t.completed || false,
-      subtasks: (t.subtasks || []).map(s => ({ id: s.id, title: s.title || '', completed: s.completed || false })),
-    }),
-    toLocal: (s) => ({
-      title: s.title || '',
-      description: s.description || '',
-      completed: s.completed || false,
-      subtasks: (s.subtasks || []).map(s => ({ id: s.id, title: s.title || '', completed: s.completed || false })),
-    }),
-    render: () => { if (!_animationInProgress) renderTasks(); },
+  fetchPublicPlans().then(() => {
+    renderTasks();
+    if (canEdit()) {
+      setupOwnerSync();
+    }
   });
-  Sync.init();
 
+  Auth.onAuthChange((state) => {
+    if (state === 'signed_in') {
+      fetchPublicPlans().then(() => {
+        renderTasks();
+        if (canEdit()) {
+          setupOwnerSync();
+        }
+      });
+      updateAuthUI();
+    } else {
+      updateAuthUI();
+    }
+  });
   updateAuthUI();
-  Auth.onAuthChange(() => updateAuthUI());
 
   let resizeRafPending = false;
   window.addEventListener('resize', () => {
@@ -151,6 +162,16 @@ function attachEventListeners() {
     }, 3000);
   });
 
+  toggleUserId.addEventListener('click', () => {
+    if (userIdDisplay.style.display === 'none') {
+      userIdDisplay.style.display = 'block';
+      toggleUserId.textContent = 'hide userId';
+    } else {
+      userIdDisplay.style.display = 'none';
+      toggleUserId.textContent = 'show userId';
+    }
+  });
+
   mobileTaskSubmit.addEventListener('click', submitMobileTask);
   mobileTaskInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') submitMobileTask();
@@ -169,6 +190,7 @@ function createCheckbox(checked, onChange) {
   cb.checked = checked;
   cb.addEventListener('change', onChange);
   cb.addEventListener('click', (e) => e.stopPropagation());
+  if (!canEdit()) cb.disabled = true;
   const custom = document.createElement('div');
   custom.className = 'checkbox-custom';
   wrapper.appendChild(cb);
@@ -181,6 +203,7 @@ function createDeleteButton(onClick) {
   btn.className = 'delete-button';
   btn.innerHTML = DELETE_SVG;
   btn.addEventListener('click', onClick);
+  if (!canEdit()) btn.style.display = 'none';
   return btn;
 }
 
@@ -191,99 +214,6 @@ function animateAndRun(el, fn) {
     _animationInProgress = false;
     fn();
   }, { once: true });
-}
-
-function handleAddButton() {
-  if (window.innerWidth <= 768) {
-    mobileTaskModal.classList.add('visible');
-    mobileTaskInput.value = '';
-    mobileTaskInput.focus();
-  } else {
-    addTask();
-  }
-}
-
-function closeMobileTaskModal() {
-  mobileTaskModal.classList.remove('visible');
-  mobileTaskInput.blur();
-}
-
-function submitMobileTask() {
-  const title = mobileTaskInput.value.trim();
-  closeMobileTaskModal();
-  addTask(title || null);
-}
-
-function generateId() {
-  const arr = new Uint8Array(8);
-  crypto.getRandomValues(arr);
-  let id = '';
-  for (let i = 0; i < arr.length; i++) {
-    id += arr[i].toString(36).padStart(2, '0');
-  }
-  return id + Date.now().toString(36);
-}
-
-function addTask(title) {
-  const task = {
-    id: generateId(),
-    created_at: Date.now(),
-    title: title ? (validateString(title, TITLE_MAX_LENGTH) ? title : title.slice(0, TITLE_MAX_LENGTH)) : '',
-    completed: false,
-    description: '',
-    subtasks: [],
-    order: tasks.length,
-    updated_at: Date.now(),
-    deleted: false,
-  };
-  tasks.push(task);
-  saveTasks();
-  Sync.pushToServer([task]);
-  renderTasks();
-
-  if (!title) {
-    setTimeout(() => {
-      const el = document.querySelector(`[data-task-id="${task.id}"] .task-title`);
-      if (el) el.focus();
-    }, 50);
-  }
-}
-
-function deleteTask(taskId) {
-  const el = document.querySelector(`[data-task-id="${taskId}"]`);
-  if (!el) return;
-  animateAndRun(el, () => {
-    const task = findTask(taskId);
-    if (task) {
-      task.deleted = true;
-      task.updated_at = Date.now();
-      Sync.pushToServer([task]);
-    }
-    if (currentTaskId === taskId) closeSidebarPanel();
-    saveTasks();
-    renderTasks();
-  });
-}
-
-function toggleTaskComplete(taskId) {
-  const el = document.querySelector(`[data-task-id="${taskId}"]`);
-  const task = findTask(taskId);
-  if (!task) return;
-  if (!el) {
-    task.completed = !task.completed;
-    task.updated_at = Date.now();
-    saveTasks();
-    Sync.pushToServer([task]);
-    renderTasks();
-    return;
-  }
-  animateAndRun(el, () => {
-    task.completed = !task.completed;
-    task.updated_at = Date.now();
-    saveTasks();
-    Sync.pushToServer([task]);
-    renderTasks();
-  });
 }
 
 function isTextSelected() {
@@ -324,73 +254,101 @@ function initSidebarResize() {
   });
 }
 
-function updateTaskTitle(taskId, title) {
-  const task = findTask(taskId);
-  if (!task) return;
-  if (!validateString(title, TITLE_MAX_LENGTH)) title = title.slice(0, TITLE_MAX_LENGTH);
-  task.title = title;
-  task.updated_at = Date.now();
-  saveTasks();
-  debounceSync(task);
-  if (currentTaskId === taskId) sidebarTitle.value = title;
-}
-
-function updateTaskDescription() {
-  const task = findTask(currentTaskId);
-  if (!task) return;
-  if (!validateString(taskDescription.value, DESCRIPTION_MAX_LENGTH)) {
-    taskDescription.value = taskDescription.value.slice(0, DESCRIPTION_MAX_LENGTH);
+function handleAddButton() {
+  if (!canEdit()) return;
+  if (window.innerWidth <= 768) {
+    mobileTaskModal.classList.add('visible');
+    mobileTaskInput.value = '';
+    mobileTaskInput.focus();
+  } else {
+    addTask();
   }
-  task.description = taskDescription.value;
-  task.updated_at = Date.now();
-  saveTasks();
-  debounceSync(task);
 }
 
-function openTaskSidebar(taskId) {
+function closeMobileTaskModal() {
+  mobileTaskModal.classList.remove('visible');
+  mobileTaskInput.blur();
+}
+
+function submitMobileTask() {
+  const title = mobileTaskInput.value.trim();
+  closeMobileTaskModal();
+  addTask(title || null);
+}
+
+function generateId() {
+  const arr = new Uint8Array(8);
+  crypto.getRandomValues(arr);
+  let id = '';
+  for (let i = 0; i < arr.length; i++) {
+    id += arr[i].toString(36).padStart(2, '0');
+  }
+  return id + Date.now().toString(36);
+}
+
+function addTask(title) {
+  if (!canEdit()) return;
+  const task = {
+    id: generateId(),
+    created_at: Date.now(),
+    title: title ? (validateString(title, TITLE_MAX_LENGTH) ? title : title.slice(0, TITLE_MAX_LENGTH)) : '',
+    completed: false,
+    description: '',
+    subtasks: [],
+    order: tasks.length,
+    updated_at: Date.now(),
+    deleted: false,
+  };
+  tasks.push(task);
+  saveTasks();
+  syncMutation([task]);
+  renderTasks();
+
+  if (!title) {
+    setTimeout(() => {
+      const el = document.querySelector(`[data-task-id="${task.id}"] .task-title`);
+      if (el) el.focus();
+    }, 50);
+  }
+}
+
+function deleteTask(taskId) {
+  if (!canEdit()) return;
+  const el = document.querySelector(`[data-task-id="${taskId}"]`);
+  if (!el) return;
+  animateAndRun(el, () => {
+    const task = findTask(taskId);
+    if (task) {
+      task.deleted = true;
+      task.updated_at = Date.now();
+      syncMutation([task]);
+    }
+    if (currentTaskId === taskId) closeSidebarPanel();
+    saveTasks();
+    renderTasks();
+  });
+}
+
+function toggleTaskComplete(taskId) {
+  if (!canEdit()) return;
+  const el = document.querySelector(`[data-task-id="${taskId}"]`);
   const task = findTask(taskId);
   if (!task) return;
-  currentTaskId = taskId;
-  sidebarTitle.value = task.title || '';
-  taskDescription.value = task.description || '';
-  renderSubtasks();
-  sidebar.classList.add('open');
-}
-
-function closeSidebarPanel() {
-  sidebar.classList.remove('open');
-  overlay.classList.remove('visible');
-  currentTaskId = null;
-}
-
-function addSubtask() {
-  const task = findTask(currentTaskId);
-  if (!task) return;
-  const subtask = { id: generateId(), title: '', completed: false };
-  task.subtasks.push(subtask);
-  task.updated_at = Date.now();
-  saveTasks();
-  Sync.pushToServer([task]);
-  renderSubtasks();
-  setTimeout(() => {
-    const el = document.querySelector(`[data-subtask-id="${subtask.id}"] .task-title`);
-    if (el) el.focus();
-  }, 50);
-}
-
-function addSubtask() {
-  const task = findTask(currentTaskId);
-  if (!task) return;
-  const subtask = { id: generateId(), title: '', completed: false };
-  task.subtasks.push(subtask);
-  task.updated_at = Date.now();
-  saveTasks();
-  Sync.pushToServer([task]);
-  renderSubtasks();
-  setTimeout(() => {
-    const el = document.querySelector(`[data-subtask-id="${subtask.id}"] .task-title`);
-    if (el) el.focus();
-  }, 50);
+  if (!el) {
+    task.completed = !task.completed;
+    task.updated_at = Date.now();
+    saveTasks();
+    syncMutation([task]);
+    renderTasks();
+    return;
+  }
+  animateAndRun(el, () => {
+    task.completed = !task.completed;
+    task.updated_at = Date.now();
+    saveTasks();
+    syncMutation([task]);
+    renderTasks();
+  });
 }
 
 function createTitleInput(value, placeholder, onInput, extra) {
@@ -404,7 +362,68 @@ function createTitleInput(value, placeholder, onInput, extra) {
   el.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
   if (extra && extra.readOnly) el.readOnly = true;
   if (extra && extra.onClick) el.addEventListener('click', extra.onClick);
+  if (extra && extra.cursor) el.style.cursor = extra.cursor;
   return el;
+}
+
+function updateTaskTitle(taskId, title) {
+  if (!canEdit()) return;
+  const task = findTask(taskId);
+  if (!task) return;
+  if (!validateString(title, TITLE_MAX_LENGTH)) title = title.slice(0, TITLE_MAX_LENGTH);
+  task.title = title;
+  task.updated_at = Date.now();
+  saveTasks();
+  debouncedSyncMutation([task]);
+  if (currentTaskId === taskId) sidebarTitle.value = title;
+}
+
+function updateTaskDescription() {
+  if (!canEdit()) return;
+  const task = findTask(currentTaskId);
+  if (!task) return;
+  if (!validateString(taskDescription.value, DESCRIPTION_MAX_LENGTH)) {
+    taskDescription.value = taskDescription.value.slice(0, DESCRIPTION_MAX_LENGTH);
+  }
+  task.description = taskDescription.value;
+  task.updated_at = Date.now();
+  saveTasks();
+  debouncedSyncMutation([task]);
+}
+
+function openTaskSidebar(taskId) {
+  const task = findTask(taskId);
+  if (!task) return;
+  currentTaskId = taskId;
+  sidebarTitle.value = task.title || '';
+  sidebarTitle.readOnly = !canEdit();
+  taskDescription.value = task.description || '';
+  taskDescription.readOnly = !canEdit();
+  renderSubtasks();
+  sidebar.classList.add('open');
+}
+
+function closeSidebarPanel() {
+  sidebar.classList.remove('open');
+  overlay.classList.remove('visible');
+  currentTaskId = null;
+}
+
+function addSubtask() {
+  if (!canEdit()) return;
+  const task = findTask(currentTaskId);
+  if (!task) return;
+  const subtask = { id: generateId(), title: '', completed: false };
+  task.subtasks.push(subtask);
+  task.updated_at = Date.now();
+  saveTasks();
+  syncMutation([task]);
+  renderSubtasks();
+  updateParentTaskCounter(task.id);
+  setTimeout(() => {
+    const el = document.querySelector(`[data-subtask-id="${subtask.id}"] .task-title`);
+    if (el) el.focus();
+  }, 50);
 }
 
 function createSubtaskItem(task, subtask) {
@@ -415,7 +434,9 @@ function createSubtaskItem(task, subtask) {
   item.appendChild(createCheckbox(subtask.completed, () => toggleSubtaskComplete(task.id, subtask.id)));
 
   item.appendChild(createTitleInput(subtask.title, 'subtask',
-    (e) => updateSubtaskTitle(task.id, subtask.id, e.target.value)));
+    (e) => updateSubtaskTitle(task.id, subtask.id, e.target.value),
+    { readOnly: !canEdit(), cursor: !canEdit() ? 'default' : undefined }
+  ));
 
   item.appendChild(createDeleteButton(() => deleteSubtask(task.id, subtask.id)));
   return item;
@@ -429,9 +450,12 @@ function renderSubtasks() {
   (task.subtasks || []).forEach(subtask => {
     subtasksList.appendChild(createSubtaskItem(task, subtask));
   });
+
+  addSubtaskButton.style.display = canEdit() ? '' : 'none';
 }
 
 function toggleSubtaskComplete(taskId, subtaskId) {
+  if (!canEdit()) return;
   const task = findTask(taskId);
   if (!task) return;
   const st = task.subtasks.find(s => s.id === subtaskId);
@@ -439,11 +463,13 @@ function toggleSubtaskComplete(taskId, subtaskId) {
   st.completed = !st.completed;
   task.updated_at = Date.now();
   saveTasks();
-  Sync.pushToServer([task]);
+  syncMutation([task]);
   renderSubtasks();
+  updateParentTaskCounter(taskId);
 }
 
 function updateSubtaskTitle(taskId, subtaskId, title) {
+  if (!canEdit()) return;
   const task = findTask(taskId);
   if (!task) return;
   const st = task.subtasks.find(s => s.id === subtaskId);
@@ -452,17 +478,19 @@ function updateSubtaskTitle(taskId, subtaskId, title) {
   st.title = title;
   task.updated_at = Date.now();
   saveTasks();
-  debounceSync(task);
+  debouncedSyncMutation([task]);
 }
 
 function deleteSubtask(taskId, subtaskId) {
+  if (!canEdit()) return;
   const task = findTask(taskId);
   if (!task) return;
   task.subtasks = task.subtasks.filter(s => s.id !== subtaskId);
   task.updated_at = Date.now();
   saveTasks();
-  Sync.pushToServer([task]);
+  syncMutation([task]);
   renderSubtasks();
+  updateParentTaskCounter(taskId);
 }
 
 function toggleCompleted() {
@@ -493,9 +521,37 @@ function updateAuthUI() {
   if (Auth.isAuthenticated()) {
     signInBtn.style.display = 'none';
     signOutBtn.style.display = 'block';
+    toggleUserId.style.display = 'block';
+    if (userIdDisplay) {
+      userIdDisplay.textContent = 'userId: ' + Auth.getUserId();
+    }
   } else {
     signInBtn.style.display = 'block';
     signOutBtn.style.display = 'none';
+    toggleUserId.style.display = 'none';
+    if (userIdDisplay) userIdDisplay.style.display = 'none';
+  }
+}
+
+function updateParentTaskCounter(taskId) {
+  const item = document.querySelector(`[data-task-id="${taskId}"]`);
+  if (!item) return;
+  const task = findTask(taskId);
+  if (!task) return;
+  const subtasks = task.subtasks || [];
+  const existing = item.querySelector('.subtask-counter');
+  if (subtasks.length > 0) {
+    const done = subtasks.filter(s => s.completed).length;
+    if (existing) {
+      existing.textContent = `${done}/${subtasks.length}`;
+    } else {
+      const counter = document.createElement('div');
+      counter.className = 'subtask-counter';
+      counter.textContent = `${done}/${subtasks.length}`;
+      item.appendChild(counter);
+    }
+  } else if (existing) {
+    existing.remove();
   }
 }
 
@@ -535,13 +591,17 @@ function renderTasks() {
   completedList.innerHTML = '';
   done.forEach(t => completedList.appendChild(createTaskElement(t)));
 
+  const completedSection = document.querySelector('.completed-section');
   if (done.length === 0) {
     completedHeader.style.display = 'none';
-    document.querySelector('.completed-section').style.display = 'none';
+    if (completedSection) completedSection.style.display = 'none';
   } else {
     completedHeader.style.display = 'flex';
-    document.querySelector('.completed-section').style.display = 'flex';
+    if (completedSection) completedSection.style.display = 'flex';
   }
+
+  addButton.style.display = canEdit() ? '' : 'none';
+  if (addSubtaskButton) addSubtaskButton.style.display = canEdit() ? '' : 'none';
 
   animateTaskListCentering();
   updateCompletedHeight();
@@ -560,7 +620,9 @@ function refreshOpenSidebarIfStale() {
   const description = task.description || '';
   if (sidebarTitle.value === title && taskDescription.value === description) return;
   sidebarTitle.value = title;
+  sidebarTitle.readOnly = !canEdit();
   taskDescription.value = description;
+  taskDescription.readOnly = !canEdit();
   renderSubtasks();
 }
 
@@ -586,6 +648,7 @@ function updateCompletedHeight() {
 }
 
 function initDragAndDrop(item, task) {
+  if (!canEdit()) return;
   item.draggable = true;
 
   item.addEventListener('dragstart', (e) => {
@@ -627,6 +690,7 @@ function initDragAndDrop(item, task) {
 }
 
 function initMobileReorder(item, task) {
+  if (!canEdit()) return;
   const titleInput = item.querySelector('.task-title');
   if (!titleInput) return;
 
@@ -706,6 +770,7 @@ function initMobileReorder(item, task) {
 }
 
 function saveDragOrder() {
+  if (!canEdit()) return;
   const items = taskListInner.querySelectorAll('.task-item');
   const taskMap = {};
   tasks.forEach(t => { taskMap[t.id] = t; });
@@ -719,7 +784,7 @@ function saveDragOrder() {
     }
   });
   saveTasks();
-  Sync.pushToServer(changed);
+  syncMutation(changed);
 }
 
 function createTaskElement(task) {
@@ -731,11 +796,12 @@ function createTaskElement(task) {
 
   item.appendChild(createCheckbox(task.completed, () => toggleTaskComplete(task.id)));
 
-  const title = createTitleInput(task.title, 'task title',
+  const title = createTitleInput(task.title, 'plan title',
     (e) => updateTaskTitle(task.id, e.target.value),
     {
-      readOnly: window.innerWidth <= 768 && !task.completed,
+      readOnly: (window.innerWidth <= 768 && !task.completed) || !canEdit(),
       onClick: (e) => { if (!_isReordering && !isTextSelected() && !task.completed) openTaskSidebar(task.id); },
+      cursor: !canEdit() ? 'default' : undefined,
     }
   );
   item.appendChild(title);
@@ -772,7 +838,7 @@ function createTaskElement(task) {
 
 function saveTasks() {
   try {
-    localStorage.setItem('tasks', JSON.stringify(tasks));
+    localStorage.setItem('plans', JSON.stringify(tasks));
   } catch (e) {
     console.warn('saveTasks failed:', e);
     showToast('Failed to save — storage may be full');
@@ -781,7 +847,8 @@ function saveTasks() {
 
 function loadTasks() {
   try {
-    const raw = localStorage.getItem('tasks');
+    const raw = localStorage.getItem('plans');
+    if (raw && raw.length > 10000000) { tasks = []; return; }
     const parsed = raw ? JSON.parse(raw) : [];
     tasks = Array.isArray(parsed) ? parsed.map(t => ({
       ...t,
@@ -794,7 +861,57 @@ function loadTasks() {
   }
 }
 
+async function fetchPublicPlans() {
+  try {
+    const res = await fetch('/api/plans/public');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.plans && Array.isArray(data.plans)) {
+      tasks = data.plans.map(p => ({
+        id: p.id,
+        created_at: p.updated_at,
+        title: p.title || '',
+        completed: p.completed || false,
+        description: p.description || '',
+        subtasks: Array.isArray(p.subtasks) ? p.subtasks.map(s => ({
+          id: Number(s.id) || s.id,
+          title: s.title || '',
+          completed: s.completed || false,
+        })) : [],
+        order: p.order ?? 0,
+        updated_at: p.updated_at || Date.now(),
+        deleted: p.deleted || false,
+      }));
+      saveTasks();
+    }
+  } catch {}
+}
+
+function setupOwnerSync() {
+  if (Sync) return;
+  Sync = SyncFactory.create({
+    endpoint: 'plans',
+    storageKey: 'plans',
+    maxItems: null,
+    getItems: () => tasks,
+    setItems: (v) => { tasks = v; },
+    buildPayload: (t) => ({
+      title: t.title || '',
+      description: t.description || '',
+      completed: t.completed || false,
+      subtasks: (t.subtasks || []).map(s => ({ id: s.id, title: s.title || '', completed: s.completed || false })),
+    }),
+    toLocal: (s) => ({
+      title: s.title || '',
+      description: s.description || '',
+      completed: s.completed || false,
+      subtasks: (s.subtasks || []).map(s => ({ id: Number(s.id) || s.id, title: s.title || '', completed: s.completed || false })),
+    }),
+    render: () => { if (!_animationInProgress) renderTasks(); },
+  });
+  Sync.init();
+}
+
 function findTask(id) {
   return tasks.find(t => t.id === id);
 }
-

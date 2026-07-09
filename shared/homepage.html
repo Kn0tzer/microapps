@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔗</text></svg>">
   <style>
     * {
       margin: 0;
@@ -33,18 +34,23 @@
       font-size: 2rem;
       font-weight: 600;
       letter-spacing: -0.04em;
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       margin-bottom: 1.5rem;
+      position: relative;
     }
 
     .github-link {
-      position: absolute;
-      top: 4rem;
-      right: 2rem;
       color: #666;
       transition: color 0.2s ease;
       display: flex;
       align-items: center;
       justify-content: center;
+      flex-shrink: 0;
     }
 
     .github-link:hover {
@@ -75,9 +81,9 @@
       color: inherit;
       display: block;
       padding: 1.5rem;
+      background: transparent;
       border: 1px solid #1a1a1a;
       border-radius: 8px;
-      background: #0a0a0a;
       transition: border-color 0.15s ease;
     }
 
@@ -113,31 +119,36 @@
 </head>
 <body>
   <div class="wrapper">
+    <div class="header-row">
     <h1>microapps</h1>
     <a href="https://github.com/Kn0tzer/microapps" class="github-link" aria-label="GitHub" target="_blank" rel="noopener noreferrer">
       <svg viewBox="0 0 1024 1024" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8C0 11.54 2.29 14.53 5.47 15.59C5.87 15.66 6.02 15.42 6.02 15.21C6.02 15.02 6.01 14.39 6.01 13.72C4 14.09 3.48 13.23 3.32 12.78C3.23 12.55 2.84 11.84 2.5 11.65C2.22 11.5 1.82 11.13 2.49 11.12C3.12 11.11 3.57 11.7 3.72 11.94C4.44 13.15 5.59 12.81 6.05 12.6C6.12 12.08 6.33 11.73 6.56 11.53C4.78 11.33 2.92 10.64 2.92 7.58C2.92 6.71 3.23 5.99 3.74 5.43C3.66 5.23 3.38 4.41 3.82 3.31C3.82 3.31 4.49 3.1 6.02 4.13C6.66 3.95 7.34 3.86 8.02 3.86C8.7 3.86 9.38 3.95 10.02 4.13C11.55 3.09 12.22 3.31 12.22 3.31C12.66 4.41 12.38 5.23 12.3 5.43C12.81 5.99 13.12 6.7 13.12 7.58C13.12 10.65 11.25 11.33 9.47 11.53C9.76 11.78 10.01 12.26 10.01 13.01C10.01 14.08 10 14.94 10 15.21C10 15.42 10.15 15.67 10.55 15.59C13.71 14.53 16 11.53 16 8C16 3.58 12.42 0 8 0Z" transform="scale(64)" fill="#ffff"/></svg>
     </a>
+    </div>
     <p class="description">
-      microapps is a collection of small, handmade web apps built to be as simple as possible, even if it means compromising on some features. each app has a consistent, minimalistic user interface designed to be as easy to use as possible. everything is hosted on my vps, keeping it fast, secure, and reliable. sign in once and sync everything securely across your devices
+      microapps is a collection of small, handmade web apps built to be as simple as possible, even if it means compromising on some features. each app has a consistent, minimalistic user interface designed to be as easy to use as possible. sign in once and sync everything securely across your devices
     </p>
     <div class="apps">
+      <a href="/microplans/" class="app-card">
+        <div class="app-title">microplans</div>
+        <div class="app-desc">public to-do list and future plans for microapps. read only version of microtask</div>
+      </a>
       <a href="/microtask/" class="app-card">
         <div class="app-title">microtask</div>
-        <div class="app-desc">a simple to-do app for listing and checking off any tasks you need to remember. used as the foundation for all other microapps</div>
+        <div class="app-desc">simple to-do app for listing and checking off any tasks you need to remember. used as the foundation for all other microapps</div>
       </a>
       <a href="/micronote/" class="app-card">
         <div class="app-title">micronote <span class="badge">unfinished</span></div>
-        <div class="app-desc">an unfinished, markdown based note-taking app</div>
+        <div class="app-desc">unfinished, markdown based note-taking app</div>
       </a>
       <a href="/microhabit/" class="app-card">
         <div class="app-title">microhabit</div>
-        <div class="app-desc">a habit tracking app for building and keeping habits</div>
+        <div class="app-desc">habit tracking app for building and keeping habits</div>
       </a>
       <a href="/microshare/" class="app-card">
-        <div class="app-title">microshare</div>
-        <div class="app-desc">a minimalistic file uploader for sharing and downloading saved files</div>
+        <div class="app-title">microshare <span class="badge">unfinished</span></div>
+        <div class="app-desc">minimalistic file uploader for sharing and downloading saved files</div>
       </a>
-      <!-- add new apps here -->
     </div>
   </div>
 </body>

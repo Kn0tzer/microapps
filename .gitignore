@@ -1,0 +1,2 @@
+# env file (real secrets — .env.example is tracked)
+.env

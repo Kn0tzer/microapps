@@ -1,16 +1,19 @@
 {
-  "name": "microtask-api",
+  "name": "microapps-api",
   "version": "1.0.0",
-  "description": "microtask backend",
+  "private": true,
+  "description": "Backend API for microapps (tasks, notes, habits, shares, plans, devices)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.21.0",
+    "express-rate-limit": "^7.5.0",
     "pg": "^8.13.0",
     "jose": "^6.0.0",
     "cors": "^2.8.5",
+    "helmet": "^8.0.0",
     "ws": "^8.18.0"
   }
 }

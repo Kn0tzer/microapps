@@ -1,120 +1,119 @@
 const Auth = (() => {
   let _identity = null;
   let _listeners = [];
-  let _initialized = false;
-  let _hasNotifiedSignIn = false;
-  let _pollInterval = null;
+  let _signedInNotified = false;
+  let _pollTimer = null;
 
-  function init() {
-    if (_initialized) return;
-    _initialized = true;
-    _loadStoredIdentity();
-    _pollForShooCallback();
+  function _notifyListeners(eventName) {
+    _listeners.forEach(cb => {
+      try { cb(eventName, _identity); } catch (e) { console.error('auth: listener error', e); }
+    });
   }
 
-  function base64urlDecode(str) {
-    str = str.replace(/-/g, '+').replace(/_/g, '/');
-    while (str.length % 4) str += '=';
-    return atob(str);
+  function _clearIdentity() {
+    _identity = null;
+    _signedInNotified = false;
+    if (_pollTimer) {
+      clearInterval(_pollTimer);
+      _pollTimer = null;
+    }
+    localStorage.removeItem('shoo_identity');
+    _notifyListeners('signed_out');
   }
 
   function _loadStoredIdentity() {
     const stored = localStorage.getItem('shoo_identity');
     if (!stored) return;
     try {
-      _identity = JSON.parse(stored);
-      if (!_identity?.token) {
-        _identity = null;
-        return;
-      }
-      const payload = JSON.parse(base64urlDecode(_identity.token.split('.')[1]));
-      if (payload.exp && payload.exp * 1000 < Date.now() - 60000) {
-        _identity = null;
-        localStorage.removeItem('shoo_identity');
-      }
-    } catch {
-      _identity = null;
-      localStorage.removeItem('shoo_identity');
-    }
+      const parsed = JSON.parse(stored);
+      if (!parsed?.token) { _clearIdentity(); return; }
+      const segments = parsed.token.split('.');
+      if (!segments[1]) { _clearIdentity(); return; }
+      const payload = JSON.parse(atob(segments[1].replace(/-/g, '+').replace(/_/g, '/').padEnd(segments[1].length + (4 - segments[1].length % 4) % 4, '=')));
+      if (payload.exp && payload.exp * 1000 < Date.now()) { _clearIdentity(); return; }
+      _identity = { userId: parsed.userId, token: parsed.token };
+    } catch (e) { console.error('auth: failed to parse stored identity', e); _clearIdentity(); }
   }
 
-  function _pollForShooCallback() {
+  function _checkIdentity(rawIdentity) {
+    try {
+      const parsed = typeof rawIdentity === 'string' ? JSON.parse(rawIdentity) : rawIdentity;
+      const newIdentity = {
+        userId: parsed.userId || parsed.pairwise_sub,
+        token: parsed.token || parsed.id_token,
+      };
+      if (newIdentity.token && newIdentity.userId) {
+        if (_pollTimer) {
+          clearInterval(_pollTimer);
+          _pollTimer = null;
+        }
+        _identity = newIdentity;
+        localStorage.setItem('shoo_identity', JSON.stringify(_identity));
+        if (!_signedInNotified) {
+          _signedInNotified = true;
+          _notifyListeners('signed_in');
+          if (typeof Sync !== 'undefined' && Sync.pullFromServer) {
+            setTimeout(() => Sync.pullFromServer(), 200);
+          }
+        }
+      }
+    } catch (e) { console.error('auth: check identity error', e); }
+  }
+
+  function _pollIdentity() {
     if (_identity?.token) return;
 
-    let attempts = 0;
-    _pollInterval = setInterval(() => {
-      attempts++;
-      if (_identity?.token) { clearInterval(_pollInterval); return; }
+    // use storage events for cross-tab / popup sign-ins
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'shoo_identity' && e.newValue) {
+        _checkIdentity(e.newValue);
+      }
+    });
 
+    let attempts = 0;
+    _pollTimer = setInterval(() => {
+      if (_identity?.token) { clearInterval(_pollTimer); _pollTimer = null; return; }
+      attempts++;
       const shooIdentity = localStorage.getItem('shoo_identity');
       let sdkIdentity = null;
       if (window.Shoo) {
-        try { sdkIdentity = window.Shoo.getIdentity(); } catch {}
+        try { sdkIdentity = window.Shoo.getIdentity(); } catch (e) { console.error('auth: shoo getIdentity error', e); }
       }
-
       const rawIdentity = shooIdentity || (sdkIdentity?.token ? sdkIdentity : null);
-
       if (rawIdentity) {
-        clearInterval(_pollInterval);
-        try {
-          const parsed = typeof rawIdentity === 'string' ? JSON.parse(rawIdentity) : rawIdentity;
-          const newIdentity = {
-            userId: parsed.userId || parsed.pairwise_sub,
-            token: parsed.token || parsed.id_token,
-          };
-
-          if (newIdentity.token && newIdentity.userId) {
-            _identity = newIdentity;
-            localStorage.setItem('shoo_identity', JSON.stringify(_identity));
-
-            if (!_hasNotifiedSignIn) {
-              _hasNotifiedSignIn = true;
-              _notifyListeners('signed_in');
-              if (typeof Sync !== 'undefined' && Sync.pullFromServer) {
-                setTimeout(() => Sync.pullFromServer(), 200);
-              }
-            }
-          }
-        } catch {}
+        _checkIdentity(rawIdentity);
       }
-
-      if (attempts >= 300) {
-        clearInterval(_pollInterval);
-        console.warn('[Auth] Polling timed out after 30s');
+      if (attempts >= 60) {
+        clearInterval(_pollTimer);
+        _pollTimer = null;
       }
-    }, 100);
-    window.addEventListener('pagehide', () => clearInterval(_pollInterval));
-    window.addEventListener('beforeunload', () => clearInterval(_pollInterval));
+    }, 500);
+    window.addEventListener('pagehide', () => {
+      if (_pollTimer) {
+        clearInterval(_pollTimer);
+        _pollTimer = null;
+      }
+    });
   }
 
   function signIn() {
-    if (!window.Shoo) return;
-    try {
-      window.Shoo.startSignIn({ returnTo: window.location.pathname });
-    } catch {}
+    if (window.Shoo) {
+      try { window.Shoo.startSignIn({ returnTo: window.location.pathname }); } catch (e) { console.error('auth: sign in error', e); }
+    }
   }
 
   function signOut() {
-    try { window.Shoo?.clearIdentity(); } catch {}
-    _identity = null;
-    _hasNotifiedSignIn = false;
-    if (_pollInterval) clearInterval(_pollInterval);
-    localStorage.removeItem('shoo_identity');
-    _notifyListeners('signed_out');
+    try { window.Shoo?.clearIdentity(); } catch (e) { console.error('auth: sign out error', e); }
+    _clearIdentity();
   }
 
   function getToken() { return _identity?.token || null; }
+  function getUserId() { return _identity?.userId || null; }
   function isAuthenticated() { return !!(_identity?.token && _identity?.userId); }
 
   function onAuthChange(callback) {
     _listeners.push(callback);
     return () => { _listeners = _listeners.filter(l => l !== callback); };
-  }
-
-  function _notifyListeners(state) {
-    _listeners.forEach(cb => {
-      try { cb(state, _identity); } catch {}
-    });
   }
 
   function refreshIdentity() {
@@ -125,34 +124,35 @@ const Auth = (() => {
         const newId = { userId: shooId.userId, token: shooId.token };
         const stored = localStorage.getItem('shoo_identity');
         const storedParsed = stored ? JSON.parse(stored) : null;
-
         if (!storedParsed || storedParsed.token !== shooId.token) {
           _identity = newId;
           localStorage.setItem('shoo_identity', JSON.stringify(_identity));
+          _notifyListeners('refreshed');
           _notifyListeners('synced');
         } else {
           _identity = newId;
         }
-        if (!storedParsed) {
-          _hasNotifiedSignIn = false;
+        if (!storedParsed && !_signedInNotified) {
+          _signedInNotified = true;
           _notifyListeners('signed_in');
         }
         return true;
       }
-    } catch {}
-    _hasNotifiedSignIn = false;
+    } catch (e) { console.error('auth: refresh identity error', e); }
     return false;
   }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-      init();
+      _loadStoredIdentity();
+      _pollIdentity();
       setTimeout(refreshIdentity, 500);
     });
   } else {
-    init();
+    _loadStoredIdentity();
+    _pollIdentity();
     setTimeout(refreshIdentity, 500);
   }
 
-  return { signIn, signOut, getToken, isAuthenticated, onAuthChange, refreshIdentity };
+  return { signIn, signOut, getToken, getUserId, isAuthenticated, onAuthChange, refreshIdentity };
 })();

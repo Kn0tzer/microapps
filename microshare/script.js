@@ -9,11 +9,31 @@ let incomingModal, incomingFrom, incomingFileName, incomingFileSize, incomingAcc
 let warningModal, warningModalText, warningOkBtn;
 let expiryModal, expiryModalSubtitle, expiryModalOptions;
 let userhashInput, userhashTooltip, defaultOptions;
+let renameModal, renameInput, renameConfirmBtn, renameCancelBtn;
 let _signingOut = false;
 let _syncDebounceTimer = null;
-const SYNC_DEBOUNCE_MS = 500;
-const SIZE_200MB = 200 * 1024 * 1024;
 const SIZE_1GB = 1 * 1024 * 1024 * 1024;
+const MEDIUM_FILE_THRESHOLD = 200 * 1024 * 1024;
+const WS_BACKOFF_MAX = 30000;
+const WS_BACKOFF_INITIAL = 1000;
+const INCOMING_TIMEOUT_MS = 60000;
+const PEER_FAILURE_TIMEOUT = 8000;
+const CHANNEL_BUFFER_MAX = 8 * 1024 * 1024;
+const CHANNEL_SPIN_TIMEOUT = 30000;
+const BLOB_URL_REVOKE_DELAY = 300000;
+const BLOB_URL_CLEANUP_DELAY = 1000;
+const MOBILE_BREAKPOINT = 768;
+const SYNC_DEBOUNCE_MS = 500;
+const MAX_FILE_SIZE = 10 * 1024 * 1024 * 1024;
+const MAX_UPLOAD_RETRIES = 3;
+const OFFER_COOLDOWN_MS = 2000;
+
+const CANCEL_SVG = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4 L12 12 M12 4 L4 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+const COPY_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 5.00005C7.01165 5.00082 6.49359 5.01338 6.09202 5.21799C5.71569 5.40973 5.40973 5.71569 5.21799 6.09202C5 6.51984 5 7.07989 5 8.2V17.8C5 18.9201 5 19.4802 5.21799 19.908C5.40973 20.2843 5.71569 20.5903 6.09202 20.782C6.51984 21 7.07989 21 8.2 21H15.8C16.9201 21 17.4802 21 17.908 20.782C18.2843 20.5903 18.5903 20.2843 18.782 19.908C19 19.4802 19 18.9201 19 17.8V8.2C19 7.07989 19 6.51984 18.782 6.09202C18.5903 5.71569 18.2843 5.40973 17.908 5.21799C17.5064 5.01338 16.9884 5.00082 16 5.00005M8 5.00005V7H16V5.00005M8 5.00005V4.70711C8 4.25435 8.17986 3.82014 8.5 3.5C8.82014 3.17986 9.25435 3 9.70711 3H14.2929C14.7456 3 15.1799 3.17986 15.5 3.5C15.8201 3.82014 16 4.25435 16 4.70711V5.00005M12 11V17M9 14H15" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const DOWNLOAD_SVG = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 2 V11 M4 7 L8 11 L12 7 M3 14 H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ARCHIVE_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.5 7 V13 C20.5 16.7712 20.5 18.6569 19.3284 19.8284 C18.1569 21 16.2712 21 12.5 21 H11.5 C7.72876 21 5.84315 21 4.67157 19.8284 C3.5 18.6569 3.5 16.7712 3.5 13 V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 5 C2 4.05719 2 3.58579 2.29289 3.29289 C2.58579 3 3.05719 3 4 3 H20 C20.9428 3 21.4142 3 21.7071 3.29289 C22 3.58579 22 4.05719 22 5 C22 5.94281 C22 6.82863 21.4142 7.20712 20.9428 7.5 C20.4714 7.79288 20 7.5 20 7.5 H4 C4 7.5 3.5286 7.79288 3.05719 7.5 C2.58579 7.20712 2 6.82863 2 5 Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+const RESTORE_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21 L12 12 M12 12 L15 15.3333 M12 12 L9 15.3333" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.5 7 V13 C20.5 16.7712 20.5 18.6569 19.3284 19.8284 C18.1569 21 16.2712 21 12.5 21 H11.5 C7.72876 21 5.84315 21 4.67157 19.8284 C3.5 18.6569 3.5 16.7712 3.5 13 V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 5 C2 4.05719 2 3.58579 2.29289 3.29289 C2.58579 3 3.05719 3 4 3 H20 C20.9428 3 21.4142 3 21.7071 3.29289 C22 3.58579 22 4.05719 22 5 C22 5.94281 C22 6.82863 21.4142 7.20712 20.9428 7.5 C20.4714 7.79288 20 7.5 20 7.5 H4 C4 7.5 3.5286 7.79288 3.05719 7.5 C2.58579 7.20712 2 6.82863 2 5 Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+const CHECK_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13 L9 17 L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 const SETTINGS_SHARE_ID = '__settings__';
 
@@ -25,6 +45,8 @@ const LITTERBOX_TIMES = {
 };
 
 const TEMP_FILEDITCH_TIMES = {
+  '1h': 60 * 60 * 1000,
+  '12h': 12 * 60 * 60 * 1000,
   '1d': 24 * 60 * 60 * 1000,
   '3d': 3 * 24 * 60 * 60 * 1000,
 };
@@ -35,6 +57,7 @@ let _isUploading = false;
 let _currentXhr = null;
 let _currentUploadCard = null;
 let _lastRenderedShareIds = null;
+let _lastArchivedSnapshot = null;
 let _pendingIncoming = null;
 let _currentPeer = null;
 let _ws = null;
@@ -42,19 +65,19 @@ let _wsReconnectTimer = null;
 let _wsBackoff = 1000;
 let _onlineDevices = [];
 let _myPublicIp = '';
-let _firstRender = true;
 let _animateShareIds = new Set();
 let _editingDeviceId = null;
 let _draggedShare = null;
-let _draggedShareEl = null;
 let _lastBlobUrl = null;
 let _animateArchivedIds = new Set();
+let _pendingRename = null;
+let _connectingWs = false;
+let _archiveCheckTimer = null;
+let _lastOfferTime = 0;
 
-const ARCHIVE_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.5 7V13C20.5 16.7712 20.5 18.6569 19.3284 19.8284C18.1569 21 16.2712 21 12.5 21H11.5C7.72876 21 5.84315 21 4.67157 19.8284C3.5 18.6569 3.5 16.7712 3.5 13V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 5C2 4.05719 2 3.58579 2.29289 3.29289C2.58579 3 3.05719 3 4 3H20C20.9428 3 21.4142 3 21.7071 3.29289C22 3.58579 22 4.05719 22 5C22 5.94281 22 6.41421 21.7071 6.70711C21.4142 7 20.9428 7 20 7H4C3.05719 7 2.58579 7 2.29289 6.70711C2 6.41421 2 5.94281 2 5Z" stroke="currentColor" stroke-width="1.5"/><path d="M12 7L12 16M12 16L15 12.6667M12 16L9 12.6667" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const UNARCHIVE_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21L12 12M12 12L15 15.3333M12 12L9 15.3333" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.5 7V13C20.5 16.7712 20.5 18.6569 19.3284 19.8284C18.1569 21 16.2712 21 12.5 21H11.5C7.72876 21 5.84315 21 4.67157 19.8284C3.5 18.6569 3.5 16.7712 3.5 13V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2 5C2 4.05719 2 3.58579 2.29289 3.29289C2.58579 3 3.05719 3 4 3H20C20.9428 3 21.4142 3 21.7071 3.29289C22 3.58579 22 4.05719 22 5C22 5.94281 22 6.41421 21.7071 6.70711C21.4142 7 20.9428 7 20 7H4C3.05719 7 2.58579 7 2.29289 6.70711C2 6.41421 2 5.94281 2 5Z" stroke="currentColor" stroke-width="1.5"/></svg>';
-const DOWNLOAD_SVG = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 2V11M4 7L8 11L12 7M3 14H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const SEND_SVG = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 8L14 3L11 14L8 9L2 8Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const CANCEL_SVG = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4L12 12M12 4L4 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+function isTextSelected() {
+  return window.getSelection && window.getSelection().toString().length > 0;
+}
 
 function detectPlatform() {
   const ua = navigator.userAgent || '';
@@ -81,20 +104,28 @@ function defaultDeviceName() {
 }
 
 function getDeviceId() {
-  let id = localStorage.getItem('microshare_device_id');
-  if (!id) {
-    id = 'dev_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-    localStorage.setItem('microshare_device_id', id);
+  try {
+    let id = localStorage.getItem('microshare_device_id');
+    if (!id) {
+      const arr = new Uint8Array(12);
+      crypto.getRandomValues(arr);
+      id = 'dev_' + Date.now() + '_' + Array.from(arr, b => b.toString(36).padStart(2, '0')).join('');
+      localStorage.setItem('microshare_device_id', id);
+    }
+    return id;
+  } catch {
+    const arr = new Uint8Array(12);
+    crypto.getRandomValues(arr);
+    return 'dev_' + Date.now() + '_' + Array.from(arr, b => b.toString(36).padStart(2, '0')).join('');
   }
-  return id;
 }
 
 function getDeviceName() {
-  return localStorage.getItem('microshare_device_name') || defaultDeviceName();
+  try { return localStorage.getItem('microshare_device_name') || defaultDeviceName(); } catch { return defaultDeviceName(); }
 }
 
 function setDeviceName(name) {
-  localStorage.setItem('microshare_device_name', name);
+  try { localStorage.setItem('microshare_device_name', name); } catch {}
   sendWs({ type: 'rename', name });
   for (const d of _onlineDevices) {
     if (d.id === getDeviceId()) {
@@ -106,11 +137,11 @@ function setDeviceName(name) {
 }
 
 function getInGlobal() {
-  return localStorage.getItem('microshare_in_global') === 'true';
+  try { return localStorage.getItem('microshare_in_global') === 'true'; } catch { return false; }
 }
 
 function setInGlobal(value) {
-  localStorage.setItem('microshare_in_global', String(value));
+  try { localStorage.setItem('microshare_in_global', String(value)); } catch {}
   sendWs({ type: 'toggleGlobal', inGlobal: value });
   for (const d of _onlineDevices) {
     if (d.id === getDeviceId()) {
@@ -122,7 +153,7 @@ function setInGlobal(value) {
 }
 
 function isMobileView() {
-  return window.innerWidth <= 768;
+  return window.innerWidth <= MOBILE_BREAKPOINT;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -154,13 +185,17 @@ document.addEventListener('DOMContentLoaded', () => {
   userhashInput = document.getElementById('userhashInput');
   userhashTooltip = document.getElementById('userhashTooltip');
   defaultOptions = document.getElementById('defaultOptions');
-
+  renameModal = document.getElementById('renameModal');
+  renameInput = document.getElementById('renameInput');
+  renameConfirmBtn = document.getElementById('renameConfirmBtn');
+  renameCancelBtn = document.getElementById('renameCancelBtn');
 
   loadShares();
   renderShares();
   attachEventListeners();
   updateGlobalToggle();
   connectWebSocket();
+  applyDevicesVisibility(loadSettings().hideDevices);
 
   Sync = SyncFactory.create({
     endpoint: 'shares',
@@ -197,6 +232,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   updateAuthUI();
   Auth.onAuthChange((state) => {
+    if (_signingOut && (state === 'signed_in' || state === 'refreshed')) {
+      _signingOut = false;
+      signOutBtn.textContent = 'sign out';
+      signOutBtn.disabled = false;
+    }
     if (!_signingOut) {
       updateAuthUI();
       reconnectWebSocket();
@@ -257,6 +297,7 @@ function attachEventListeners() {
         const fallback = defaultOptions.querySelector('[data-value="ask"]');
         if (fallback) fallback.classList.add('selected');
       }
+      updateFileditchToggleVisibility();
     });
   }
 
@@ -275,12 +316,25 @@ function attachEventListeners() {
       saveSettings(settings);
     });
   }
+  const hideDevicesToggle = document.getElementById('hideDevicesToggle');
+  if (hideDevicesToggle) {
+    hideDevicesToggle.addEventListener('change', () => {
+      applyDevicesVisibility(hideDevicesToggle.checked);
+    });
+  }
 
   archivedHeader.addEventListener('click', toggleArchived);
   globalToggle.addEventListener('click', (e) => {
     e.stopPropagation();
     setInGlobal(!getInGlobal());
     updateGlobalToggle();
+  });
+
+  window.addEventListener('resize', () => {
+    const section = document.querySelector('.archived-section');
+    if (section && section.classList.contains('expanded')) {
+      updateArchivedHeight();
+    }
   });
 
   incomingAcceptBtn.addEventListener('click', () => acceptIncoming());
@@ -297,7 +351,20 @@ function attachEventListeners() {
     if (e.target === expiryModal) hideExpiryModal();
   });
 
+  renameConfirmBtn.addEventListener('click', () => confirmRename());
+  renameCancelBtn.addEventListener('click', () => cancelRename());
+  renameModal.addEventListener('click', (e) => {
+    if (e.target === renameModal) cancelRename();
+  });
+  renameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); confirmRename(); }
+    if (e.key === 'Escape') { e.preventDefault(); cancelRename(); }
+  });
+
   let dragCounter = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) reconnectWebSocket();
+  });
   window.addEventListener('dragenter', (e) => {
     e.preventDefault();
     if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes('Files')) return;
@@ -330,6 +397,47 @@ function attachEventListeners() {
       }
     }
   });
+
+  shareGrid.addEventListener('dragstart', (e) => {
+    const card = e.target.closest('.share-card:not(.uploading)');
+    if (!card) return;
+    const share = findShare(card.dataset.shareId);
+    if (!share) return;
+    if (e.target.closest('.share-name') || isTextSelected()) {
+      e.preventDefault();
+      return;
+    }
+    _draggedShare = share;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(share.id));
+  });
+
+  shareGrid.addEventListener('dragend', (e) => {
+    const card = e.target.closest('.share-card');
+    if (card) card.classList.remove('dragging');
+    _draggedShare = null;
+  });
+
+  shareGrid.addEventListener('dragover', (e) => {
+    const card = e.target.closest('.share-card:not(.uploading)');
+    if (!card) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (!_draggedShare || _draggedShare.id === card.dataset.shareId) return;
+    const rect = card.getBoundingClientRect();
+    const midX = rect.left + rect.width / 2;
+    if (e.clientX < midX) {
+      shareGrid.insertBefore(document.querySelector('.dragging'), card);
+    } else {
+      shareGrid.insertBefore(document.querySelector('.dragging'), card.nextElementSibling);
+    }
+  });
+
+  shareGrid.addEventListener('drop', (e) => {
+    e.preventDefault();
+    saveShareDragOrder();
+  });
 }
 
 function updateGlobalToggle() {
@@ -340,6 +448,16 @@ function updateGlobalToggle() {
 function handleFiles(fileList) {
   const files = Array.from(fileList);
   if (files.length === 0) return;
+  for (const f of files) {
+    if (f.size > MAX_FILE_SIZE) {
+      showWarning('file too large (max 10 GB)');
+      return;
+    }
+    if (f.size === 0) {
+      showWarning('empty file skipped');
+      return;
+    }
+  }
   const defaultOption = loadSettings().defaultOption;
   if (defaultOption && defaultOption !== 'ask') {
     for (const f of files) {
@@ -394,22 +512,16 @@ function computeAvailableOptions(files) {
     if (f.size >= SIZE_1GB) allUnder1GB = false;
     else all1GBOrMore = false;
   }
-  if (all1GBOrMore) {
+  if (all1GBOrMore || !allUnder1GB) {
     return [
-      { id: '3d', label: '3 days' },
-      { id: 'never', label: 'never' },
-    ];
-  }
-  if (allUnder1GB) {
-    return [
-      { id: '1h', label: '1 hour' },
-      { id: '12h', label: '12 hours' },
-      { id: '1d', label: '1 day' },
       { id: '3d', label: '3 days' },
       { id: 'never', label: 'never' },
     ];
   }
   return [
+    { id: '1h', label: '1 hour' },
+    { id: '12h', label: '12 hours' },
+    { id: '1d', label: '1 day' },
     { id: '3d', label: '3 days' },
     { id: 'never', label: 'never' },
   ];
@@ -430,40 +542,30 @@ function queueWithAutoExpiry(file) {
 
 function resolveUploadPlan(file, option) {
   const settings = loadSettings();
-  const fdHost = settings.preferFileditch ? 'fileditch' : 'temp_fileditch';
-
-  if (settings.preferFileditch) {
-    return {
-      host: fdHost,
-      uploadHost: fdHost,
-      time: option.id === 'never' ? null : option.id,
-      expires_at: option.id === 'never' ? null : (Date.now() + (TEMP_FILEDITCH_TIMES[option.id] || 0)),
-    };
-  }
-
+  const fileditchHost = settings.preferFileditch ? 'fileditch' : 'temp_fileditch';
   const isLarge = file.size >= SIZE_1GB;
-  const isMedium = file.size >= SIZE_200MB;
+  const isMedium = file.size >= MEDIUM_FILE_THRESHOLD;
   const choice = option.id;
 
   if (isLarge) {
     if (choice === '3d') {
       return {
-        host: fdHost,
-        uploadHost: fdHost,
+        host: fileditchHost,
+        uploadHost: fileditchHost,
         time: '3d',
         expires_at: Date.now() + TEMP_FILEDITCH_TIMES['3d'],
       };
     }
     return {
-      host: fdHost,
-      uploadHost: fdHost,
+      host: fileditchHost,
+      uploadHost: fileditchHost,
       time: null,
       expires_at: null,
     };
   }
 
-  if (choice === 'never' && !isMedium) {
-    if (settings.userhash) {
+  if (choice === 'never') {
+    if (settings.userhash && !isMedium) {
       return {
         host: 'catbox',
         uploadHost: 'catbox',
@@ -472,19 +574,19 @@ function resolveUploadPlan(file, option) {
       };
     }
     return {
-      host: fdHost,
-      uploadHost: fdHost,
+      host: fileditchHost,
+      uploadHost: fileditchHost,
       time: null,
       expires_at: null,
     };
   }
 
-  if (choice === 'never') {
+  if (settings.preferFileditch) {
     return {
-      host: 'litterbox',
-      uploadHost: 'litterbox',
-      time: '3d',
-      expires_at: Date.now() + LITTERBOX_TIMES['3d'],
+      host: fileditchHost,
+      uploadHost: fileditchHost,
+      time: choice,
+      expires_at: Date.now() + (TEMP_FILEDITCH_TIMES[choice] || 0),
     };
   }
 
@@ -497,7 +599,7 @@ function resolveUploadPlan(file, option) {
 }
 
 function enqueueUpload(file, plan) {
-  _uploadQueue.push({ file, plan });
+  _uploadQueue.push({ file, plan, retries: 0 });
   processUploadQueue();
 }
 
@@ -506,7 +608,8 @@ async function processUploadQueue() {
   if (_uploadQueue.length === 0) return;
 
   _isUploading = true;
-  const { file, plan } = _uploadQueue.shift();
+  const item = _uploadQueue.shift();
+  const { file, plan, retries = 0 } = item;
 
   const tempId = Date.now();
   const onCancel = () => {
@@ -521,6 +624,7 @@ async function processUploadQueue() {
   const startTime = Date.now();
   let lastLoaded = 0;
   let lastTime = startTime;
+  const formattedTotal = formatSize(file.size);
 
   try {
     const result = await uploadExternal(file, plan, (loaded, total) => {
@@ -544,7 +648,7 @@ async function processUploadQueue() {
       if (pctEl) pctEl.textContent = Math.floor(pct) + '%';
 
       const amountEl = tempCard.querySelector('.upload-amount');
-      if (amountEl) amountEl.textContent = formatSize(loaded) + '/' + formatSize(total);
+      if (amountEl) amountEl.textContent = formatSize(loaded) + '/' + formattedTotal;
 
       const etaEl = tempCard.querySelector('.upload-eta');
       if (etaEl) etaEl.textContent = formatTime(remaining);
@@ -574,11 +678,17 @@ async function processUploadQueue() {
     shares.push(newShare);
     saveShares();
     renderShares();
-    syncMutation([newShare]);
+    debouncedSyncMutation([newShare]);
   } catch (err) {
     tempCard.remove();
     _currentUploadCard = null;
-    showWarning('upload failed: ' + (err.message || 'unknown error'));
+    if (err.message !== 'aborted') {
+      if (retries >= MAX_UPLOAD_RETRIES) {
+        showWarning('upload failed after ' + MAX_UPLOAD_RETRIES + ' attempts');
+      } else {
+        _uploadQueue.unshift({ file, plan, retries: retries + 1 });
+      }
+    }
   } finally {
     _isUploading = false;
     _currentXhr = null;
@@ -593,106 +703,101 @@ async function uploadExternal(file, plan, onProgress, onXhr) {
   if (plan.uploadHost === 'temp_fileditch' || plan.uploadHost === 'fileditch') {
     return await uploadToFileditch(file, plan, onProgress, onXhr);
   }
-  throw new Error('unsupported host: ' + plan.uploadHost);
+  throw new Error('unsupported upload host');
+}
+
+function createXhrRequest({ url, method, body, headers, onProgress, onXhr }) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    if (onXhr) onXhr(xhr);
+    xhr.open(method || 'POST', url);
+    if (headers) {
+      for (const k of Object.entries(headers)) {
+        xhr.setRequestHeader(k[0], k[1]);
+      }
+    }
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable && onProgress) onProgress(e.loaded, e.total);
+    });
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(xhr);
+      } else {
+        reject(new Error('upload failed (' + xhr.status + ')'));
+      }
+    });
+    xhr.addEventListener('error', () => reject(new Error('network error')));
+    xhr.addEventListener('abort', () => reject(new Error('aborted')));
+    xhr.send(body);
+  });
 }
 
 function uploadViaProxy(file, plan, onProgress, onXhr) {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    if (onXhr) onXhr(xhr);
-    const params = new URLSearchParams();
-    params.set('host', plan.uploadHost);
-    params.set('filename', file.name);
-    params.set('mimeType', file.type || 'application/octet-stream');
-    if (plan.time) params.set('time', plan.time);
-    if (plan.uploadHost === 'catbox') {
-      const userhash = loadSettings().userhash;
-      if (userhash) params.set('userhash', userhash);
-    }
-    const url = window.location.origin + '/api/upload/proxy?' + params.toString();
-    xhr.open('POST', url);
-    const token = Auth.getToken();
-    if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
-    xhr.upload.addEventListener('progress', (e) => {
-      if (e.lengthComputable && onProgress) onProgress(e.loaded, e.total);
-    });
-    xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        const text = (xhr.responseText || '').trim();
-        if (!text) {
-          reject(new Error('empty ' + plan.uploadHost + ' response'));
-          return;
-        }
-        const firstLine = text.split(/\r?\n/)[0].trim();
-        const downloadUrl = firstLine;
-        let externalId = '';
-        try {
-          const u = new URL(downloadUrl);
-          const parts = u.pathname.split('/').filter(Boolean);
-          externalId = parts[parts.length - 1] || downloadUrl;
-        } catch {
-          externalId = downloadUrl;
-        }
-        resolve({
-          id: externalId,
-          name: file.name,
-          size: file.size,
-          mime_type: file.type || '',
-          host: plan.host,
-          external_id: externalId,
-          download_url: downloadUrl,
-        });
-      } else {
-        reject(new Error(plan.uploadHost + ' upload failed (' + xhr.status + '): ' + (xhr.responseText || '')));
+  const params = new URLSearchParams();
+  params.set('host', plan.uploadHost);
+  params.set('filename', file.name);
+  params.set('mimeType', file.type || 'application/octet-stream');
+  if (plan.time) params.set('time', plan.time);
+  const url = window.location.origin + '/api/upload/proxy?' + params.toString();
+  const headers = {};
+  const token = Auth.getToken();
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const userhash = loadSettings().userhash;
+  if (plan.uploadHost === 'catbox' && userhash) {
+    headers['X-Userhash'] = userhash;
+  }
+  return createXhrRequest({ url, method: 'POST', body: file, headers, onProgress, onXhr })
+    .then(xhr => {
+      const text = (xhr.responseText || '').trim();
+      if (!text) throw new Error('empty response from upload host');
+      const firstLine = text.split(/\r?\n/)[0].trim();
+      const downloadUrl = firstLine;
+      let externalId = '';
+      try {
+        const u = new URL(downloadUrl);
+        const parts = u.pathname.split('/').filter(Boolean);
+        externalId = parts[parts.length - 1] || downloadUrl;
+      } catch {
+        externalId = downloadUrl;
       }
+      return {
+        id: externalId,
+        name: file.name,
+        size: file.size,
+        mime_type: file.type || '',
+        host: plan.host,
+        external_id: externalId,
+        download_url: downloadUrl,
+      };
     });
-    xhr.addEventListener('error', () => reject(new Error(plan.uploadHost + ' network error')));
-    xhr.addEventListener('abort', () => reject(new Error('aborted')));
-    xhr.send(file);
-  });
 }
 
 function uploadToFileditch(file, plan, onProgress, onXhr) {
-  return new Promise((resolve, reject) => {
-    const formData = new FormData();
-    formData.append('file', file, file.name);
-    if (plan.time) formData.append('time', plan.time);
-    const xhr = new XMLHttpRequest();
-    if (onXhr) onXhr(xhr);
-    const uploadUrl = plan.uploadHost === 'fileditch'
-      ? 'https://new.fileditch.com/upload.php'
-      : 'https://temp.fileditch.com/upload.php';
-    xhr.open('POST', uploadUrl);
-    xhr.upload.addEventListener('progress', (e) => {
-      if (e.lengthComputable && onProgress) onProgress(e.loaded, e.total);
-    });
-    xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        let data = null;
-        try { data = JSON.parse(xhr.responseText); } catch {}
-        if (data && data.url) {
-          const externalId = data.filename || (data.url.split('/').pop() || '');
-          const resolvedHost = plan.uploadHost === 'fileditch' ? 'fileditch' : 'temp_fileditch';
-          resolve({
-            id: externalId,
-            name: data.filename || file.name,
-            size: data.size != null ? data.size : file.size,
-            mime_type: file.type || '',
-            host: resolvedHost,
-            external_id: externalId,
-            download_url: data.url,
-          });
-        } else {
-          reject(new Error('invalid ' + uploadUrl + ' response'));
-        }
-      } else {
-        reject(new Error(uploadUrl + ' upload failed (' + xhr.status + '): ' + (xhr.responseText || '')));
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+  if (plan.time) formData.append('time', plan.time);
+  const uploadUrl = plan.uploadHost === 'fileditch'
+    ? 'https://new.fileditch.com/upload.php'
+    : 'https://temp.fileditch.com/upload.php';
+  return createXhrRequest({ url: uploadUrl, method: 'POST', body: formData, onProgress, onXhr })
+    .then(xhr => {
+      let data = null;
+      try { data = JSON.parse(xhr.responseText); } catch {}
+      if (data && data.url) {
+        const externalId = data.filename || (data.url.split('/').pop() || '');
+        const resolvedHost = plan.uploadHost === 'fileditch' ? 'fileditch' : 'temp_fileditch';
+        return {
+          id: externalId,
+          name: data.filename || file.name,
+          size: data.size != null ? data.size : file.size,
+          mime_type: file.type || '',
+          host: resolvedHost,
+          external_id: externalId,
+          download_url: data.url,
+        };
       }
+      throw new Error('invalid upload response');
     });
-    xhr.addEventListener('error', () => reject(new Error(uploadUrl + ' network error')));
-    xhr.addEventListener('abort', () => reject(new Error('aborted')));
-    xhr.send(formData);
-  });
 }
 
 function createUploadingCard(file, plan, tempId, onCancel) {
@@ -700,8 +805,8 @@ function createUploadingCard(file, plan, tempId, onCancel) {
   card.className = 'share-card uploading';
   card.dataset.tempId = tempId;
 
-  const info = document.createElement('div');
-  info.className = 'share-info';
+  const infoEl = document.createElement('div');
+  infoEl.className = 'share-info';
   const name = document.createElement('div');
   name.className = 'share-name';
   name.textContent = file.name;
@@ -711,10 +816,10 @@ function createUploadingCard(file, plan, tempId, onCancel) {
   size.className = 'share-size';
   size.textContent = formatSize(file.size);
   meta.appendChild(size);
-  info.appendChild(name);
-  info.appendChild(meta);
+  infoEl.appendChild(name);
+  infoEl.appendChild(meta);
 
-  card.appendChild(info);
+  card.appendChild(infoEl);
 
   const cancelBtn = document.createElement('button');
   cancelBtn.className = 'share-cancel';
@@ -769,79 +874,83 @@ function archiveShare(shareId) {
   }
 }
 
+function archiveShareInternal(share) {
+  if (!share || share.archived) return;
+  share.archived = true;
+  share.updated_at = Date.now();
+  shares = shares.filter(s => s.id !== share.id);
+  archivedShares.push(share);
+}
+
 function performArchive(shareId) {
   const share = findShare(shareId);
   if (!share) return;
-  share.archived = true;
-  share.updated_at = Date.now();
-  shares = shares.filter(s => s.id !== shareId);
-  archivedShares.push(share);
+  archiveShareInternal(share);
   _animateArchivedIds.add(shareId);
   saveShares();
-  syncMutation([share]);
+  debouncedSyncMutation([share]);
   renderShares();
 }
 
 function restoreArchive(shareId) {
-  const share = archivedShares.find(s => s.id === shareId);
-  if (!share) return;
+  const idx = archivedShares.findIndex(s => s.id === shareId);
+  if (idx === -1) return;
+  const share = archivedShares[idx];
   share.archived = false;
   share.updated_at = Date.now();
+  archivedShares.splice(idx, 1);
+  shares.push(share);
   saveShares();
-  syncMutation([share]);
+  debouncedSyncMutation([share]);
   renderShares();
 }
 
 function toggleArchived() {
   archivedHeader.classList.toggle('collapsed');
+  const section = document.querySelector('.archived-section');
+  section.classList.toggle('expanded');
   archivedList.classList.toggle('collapsed');
+
+  if (section.classList.contains('expanded')) {
+    updateArchivedHeight();
+  } else {
+    section.style.height = '';
+  }
+}
+
+function updateArchivedHeight() {
+  const section = document.querySelector('.archived-section');
+  if (!section.classList.contains('expanded')) return;
+
+  const archived = archivedShares.filter(s => s.archived && !s.deleted && s.id !== SETTINGS_SHARE_ID);
+  const isMobile = window.innerWidth <= MOBILE_BREAKPOINT;
+  const headerH = isMobile ? 48 : 40;
+  const cardH = isMobile ? 52 : 48;
+  const maxH = window.innerHeight * (isMobile ? 0.85 : 0.5);
+  section.style.height = Math.min(headerH + archived.length * cardH, maxH) + 'px';
 }
 
 function loadSettings() {
-  const settingsShare = shares.find(s => s.id === SETTINGS_SHARE_ID);
-  if (settingsShare) {
-    try {
-      const data = JSON.parse(settingsShare.name);
-      return {
-        userhash: (data.userhash || localStorage.getItem('microshare_userhash') || '').trim(),
-        defaultOption: data.defaultOption || localStorage.getItem('microshare_default_upload') || 'ask',
-        preferFileditch: data.preferFileditch === true,
-      };
-    } catch {}
+  try {
+    return {
+      userhash: (localStorage.getItem('microshare_userhash') || '').trim(),
+      defaultOption: localStorage.getItem('microshare_default_upload') || 'ask',
+      preferFileditch: localStorage.getItem('microshare_prefer_fileditch') === 'true',
+      hideDevices: localStorage.getItem('microshare_hide_devices') === 'true',
+    };
+  } catch {
+    return { userhash: '', defaultOption: 'ask', preferFileditch: false, hideDevices: false };
   }
-  return {
-    userhash: (localStorage.getItem('microshare_userhash') || '').trim(),
-    defaultOption: localStorage.getItem('microshare_default_upload') || 'ask',
-    preferFileditch: localStorage.getItem('microshare_prefer_fileditch') === 'true',
-  };
 }
 
 function saveSettings(s) {
   const userhash = (s.userhash || '').trim();
-  localStorage.setItem('microshare_userhash', userhash);
-  localStorage.setItem('microshare_default_upload', s.defaultOption || 'ask');
-  localStorage.setItem('microshare_prefer_fileditch', String(!!s.preferFileditch));
-  const existing = shares.findIndex(s => s.id === SETTINGS_SHARE_ID);
-  const settingsItem = {
-    id: SETTINGS_SHARE_ID,
-    name: JSON.stringify({ userhash, defaultOption: s.defaultOption || 'ask', preferFileditch: !!s.preferFileditch }),
-    size: 0,
-    mime_type: '',
-    host: '',
-    external_id: '',
-    download_url: '',
-    archived: false,
-    expires_at: null,
-    updated_at: Date.now(),
-    deleted: false,
-    order: -1,
-  };
-  if (existing >= 0) {
-    shares[existing] = settingsItem;
-  } else {
-    shares.push(settingsItem);
-  }
-  syncMutation([settingsItem]);
+  try {
+    localStorage.setItem('microshare_userhash', userhash);
+    localStorage.setItem('microshare_default_upload', s.defaultOption || 'ask');
+    localStorage.setItem('microshare_prefer_fileditch', String(!!s.preferFileditch));
+    localStorage.setItem('microshare_hide_devices', String(!!s.hideDevices));
+  } catch {}
 }
 
 function renderDefaultOptions(settings) {
@@ -858,8 +967,8 @@ function renderDefaultOptions(settings) {
     ];
   } else {
     opts = [
-      { id: '3d', label: 'temp.fileditch (3d)' },
-      { id: 'never', label: 'temp.fileditch (never)' },
+      { id: '3d', label: '3 days' },
+      { id: 'never', label: 'never' },
       { id: 'ask', label: 'ask each time' },
     ];
   }
@@ -887,9 +996,20 @@ function openSettings() {
   userhashInput.value = settings.userhash;
   const toggle = document.getElementById('preferFileditchToggle');
   if (toggle) toggle.checked = settings.preferFileditch;
+  const hideToggle = document.getElementById('hideDevicesToggle');
+  if (hideToggle) hideToggle.checked = settings.hideDevices;
+  updateFileditchToggleVisibility();
   renderDefaultOptions(settings);
   settingsOverlay.classList.add('visible');
   updateAuthUI();
+}
+
+function updateFileditchToggleVisibility() {
+  const userhash = userhashInput.value.trim();
+  const row = document.getElementById('preferFileditchToggle')?.closest('.settings-section');
+  if (row) {
+    row.style.display = userhash ? 'flex' : 'none';
+  }
 }
 
 function closeSettingsPanel() {
@@ -897,8 +1017,17 @@ function closeSettingsPanel() {
   const selected = defaultOptions.querySelector('.selected');
   const defaultOption = selected ? selected.dataset.value : 'ask';
   const preferFileditch = document.getElementById('preferFileditchToggle')?.checked || false;
-  saveSettings({ userhash, defaultOption, preferFileditch });
+  const hideDevices = document.getElementById('hideDevicesToggle')?.checked || false;
+  saveSettings({ userhash, defaultOption, preferFileditch, hideDevices });
+  applyDevicesVisibility(hideDevices);
   settingsOverlay.classList.remove('visible');
+}
+
+function applyDevicesVisibility(hidden) {
+  const section = document.querySelector('.devices-section');
+  if (section) {
+    section.classList.toggle('hidden', hidden);
+  }
 }
 
 function updateAuthUI() {
@@ -913,13 +1042,12 @@ function updateAuthUI() {
 }
 
 function getDaysLeft(share) {
-  if (share.expires_at === null) return Infinity;
-  if (typeof share.expires_at === 'number' && share.expires_at > 0) {
-    const msLeft = share.expires_at - Date.now();
-    if (msLeft <= 0) return 0;
-    return msLeft / (1000 * 60 * 60 * 24);
-  }
-  return null;
+  if (share.expires_at === null || share.expires_at === undefined) return Infinity;
+  const expiresAt = typeof share.expires_at === 'number' ? share.expires_at : Number(share.expires_at);
+  if (isNaN(expiresAt) || expiresAt <= 0) return null;
+  const msLeft = expiresAt - Date.now();
+  if (msLeft <= 0) return 0;
+  return msLeft / (1000 * 60 * 60 * 24);
 }
 
 function formatTimeLeft(daysLeft) {
@@ -937,7 +1065,8 @@ function formatTimeLeft(daysLeft) {
 function hostLabel(host) {
   if (host === 'catbox') return 'catbox';
   if (host === 'litterbox') return 'litterbox';
-  if (host === 'temp_fileditch') return 'fileditch';
+  if (host === 'temp_fileditch') return 'temp fileditch';
+  if (host === 'fileditch') return 'fileditch';
   return host;
 }
 
@@ -948,20 +1077,27 @@ function archiveExpiredShares() {
   });
   if (expired.length === 0) return;
   for (const share of expired) {
-    share.archived = true;
-    share.updated_at = Date.now();
-    shares = shares.filter(s => s.id !== share.id);
-    archivedShares.push(share);
-    syncMutation([share]);
+    archiveShareInternal(share);
   }
+  debouncedSyncMutation(expired);
   saveShares();
 }
 
 function renderShares() {
-  archiveExpiredShares();
+  if (!_archiveCheckTimer) {
+    _archiveCheckTimer = setTimeout(() => {
+      _archiveCheckTimer = null;
+      archiveExpiredShares();
+    }, 2000);
+  }
 
   const active = shares.filter(s => !s.archived && !s.deleted && s.id !== SETTINGS_SHARE_ID)
-    .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+    .sort((a, b) => {
+      const aOrder = a.order != null ? a.order : 0;
+      const bOrder = b.order != null ? b.order : 0;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return (b.updated_at || 0) - (a.updated_at || 0);
+    });
   const activeIds = active.map(s => String(s.id));
 
   if (_lastRenderedShareIds && arraysEqual(_lastRenderedShareIds, activeIds)) {
@@ -980,8 +1116,6 @@ function renderShares() {
     if (_animateShareIds.has(s.id)) {
       card.classList.add('adding');
       _animateShareIds.delete(s.id);
-    } else if (_firstRender && s.updated_at && Date.now() - s.updated_at < 60000) {
-      card.classList.add('adding');
     }
     shareGrid.appendChild(card);
   });
@@ -991,18 +1125,22 @@ function renderShares() {
   }
 
   renderArchivedList();
-
-  if (_firstRender) _firstRender = false;
 }
 
 function renderArchivedList() {
+  const snapshot = archivedShares.map(s => s.id + ':' + s.updated_at).join(',');
+  if (_lastArchivedSnapshot === snapshot) return;
+  _lastArchivedSnapshot = snapshot;
   archivedList.innerHTML = '';
   const archived = archivedShares.filter(s => s.archived && !s.deleted && s.id !== SETTINGS_SHARE_ID)
     .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+  const archivedSection = document.querySelector('.archived-section');
   if (archived.length === 0) {
     archivedHeader.style.display = 'none';
+    if (archivedSection) archivedSection.style.display = 'none';
   } else {
     archivedHeader.style.display = 'flex';
+    if (archivedSection) archivedSection.style.display = 'flex';
     archived.forEach(s => {
       const card = createArchivedCard(s);
       if (_animateArchivedIds.has(s.id)) {
@@ -1012,6 +1150,7 @@ function renderArchivedList() {
       archivedList.appendChild(card);
     });
   }
+  updateArchivedHeight();
 }
 
 function arraysEqual(a, b) {
@@ -1022,63 +1161,25 @@ function arraysEqual(a, b) {
   return true;
 }
 
-function startRenameShare(shareId, nameEl) {
-  const share = findShare(shareId);
-  if (!share) return;
-
-  const textSpan = nameEl.querySelector('span');
-  if (!textSpan) return;
-
-  let newName;
-  if (isMobileView()) {
-    const input = prompt('rename file', share.name || '');
-    if (input === null) return;
-    newName = input.trim();
-  } else {
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'share-name-input';
-    input.value = share.name || '';
-    input.autocomplete = 'off';
-    input.spellcheck = false;
-    textSpan.replaceWith(input);
-    input.focus();
-    input.select();
-
-    let resolved = false;
-    const finish = (commit) => {
-      if (resolved) return;
-      resolved = true;
-      if (!commit) {
-        input.replaceWith(textSpan);
-        return;
-      }
-      const value = input.value.trim();
-      if (value && value !== share.name) {
-        share.name = value;
-        share.updated_at = Date.now();
-        saveShares();
-        debouncedSyncMutation([share]);
-      }
-      textSpan.textContent = share.name;
-      input.replaceWith(textSpan);
-    };
-    const onKey = (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-      if (e.key === 'Escape') { e.preventDefault(); finish(false); }
-    };
-    const onBlur = () => finish(true);
-    input.addEventListener('keydown', onKey);
-    input.addEventListener('blur', onBlur);
-    return;
+function confirmRename() {
+  if (!_pendingRename) return;
+  const { share, textSpan } = _pendingRename;
+  const value = renameInput.value.trim();
+  if (value && value !== share.name) {
+    share.name = value;
+    share.updated_at = Date.now();
+    saveShares();
+    debouncedSyncMutation([share]);
   }
+  textSpan.textContent = share.name;
+  _pendingRename = null;
+  renameModal.classList.remove('visible');
+}
 
-  if (!newName || newName === share.name) return;
-  share.name = newName;
-  share.updated_at = Date.now();
-  saveShares();
-  syncMutation([share]);
-  renderShares();
+function cancelRename() {
+  if (!_pendingRename) return;
+  _pendingRename = null;
+  renameModal.classList.remove('visible');
 }
 
 function createShareCard(share) {
@@ -1086,8 +1187,8 @@ function createShareCard(share) {
   card.className = 'share-card';
   card.dataset.shareId = share.id;
 
-  const info = document.createElement('div');
-  info.className = 'share-info';
+  const infoEl = document.createElement('div');
+  infoEl.className = 'share-info';
   const name = document.createElement('div');
   name.className = 'share-name';
   const nameText = document.createElement('span');
@@ -1112,12 +1213,27 @@ function createShareCard(share) {
     expiry.textContent = expiryText;
     meta.appendChild(expiry);
   }
-  info.appendChild(name);
-  info.appendChild(meta);
+  infoEl.appendChild(name);
+  infoEl.appendChild(meta);
 
-  card.appendChild(info);
+  card.appendChild(infoEl);
+
+  const actions = document.createElement('div');
+  actions.className = 'share-actions';
 
   if (share.download_url) {
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'share-copy';
+    copyBtn.title = 'copy link';
+    copyBtn.setAttribute('aria-label', 'copy link');
+    copyBtn.innerHTML = COPY_SVG;
+    copyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      copyLink(share.download_url);
+      showCopyFeedback(copyBtn);
+    });
+    actions.appendChild(copyBtn);
+
     const downloadLink = document.createElement('a');
     downloadLink.className = 'share-download';
     downloadLink.href = share.download_url;
@@ -1126,7 +1242,7 @@ function createShareCard(share) {
     downloadLink.title = 'download';
     downloadLink.setAttribute('aria-label', 'download');
     downloadLink.innerHTML = DOWNLOAD_SVG;
-    card.appendChild(downloadLink);
+    actions.appendChild(downloadLink);
   }
 
   const archiveBtn = document.createElement('button');
@@ -1138,42 +1254,12 @@ function createShareCard(share) {
     e.stopPropagation();
     archiveShare(share.id);
   });
-  card.appendChild(archiveBtn);
+  actions.appendChild(archiveBtn);
 
-  initShareDrag(card, share);
-  return card;
-}
+  card.appendChild(actions);
 
-function initShareDrag(card, share) {
   card.draggable = true;
-  card.addEventListener('dragstart', (e) => {
-    _draggedShare = share;
-    _draggedShareEl = card;
-    card.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(share.id));
-  });
-  card.addEventListener('dragend', () => {
-    card.classList.remove('dragging');
-    _draggedShare = null;
-    _draggedShareEl = null;
-  });
-  card.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (!_draggedShare || _draggedShare.id === share.id) return;
-    const rect = card.getBoundingClientRect();
-    const midX = rect.left + rect.width / 2;
-    if (e.clientX < midX) {
-      shareGrid.insertBefore(_draggedShareEl, card);
-    } else {
-      shareGrid.insertBefore(_draggedShareEl, card.nextElementSibling);
-    }
-  });
-  card.addEventListener('drop', (e) => {
-    e.preventDefault();
-    saveShareDragOrder();
-  });
+  return card;
 }
 
 function saveShareDragOrder() {
@@ -1187,7 +1273,7 @@ function saveShareDragOrder() {
   });
   saveShares();
   const changed = Array.from(cards).map(card => findShare(card.dataset.shareId)).filter(Boolean);
-  syncMutation(changed);
+  debouncedSyncMutation(changed);
 }
 
 function createArchivedCard(share) {
@@ -1218,11 +1304,35 @@ function createArchivedCard(share) {
   row.className = 'archived-card-row';
   row.appendChild(meta);
 
+  if (share.download_url) {
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'archived-card-action';
+    copyBtn.title = 'copy link';
+    copyBtn.setAttribute('aria-label', 'copy link');
+    copyBtn.innerHTML = COPY_SVG;
+    copyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      copyLink(share.download_url);
+      showCopyFeedback(copyBtn);
+    });
+    row.appendChild(copyBtn);
+
+    const downloadLink = document.createElement('a');
+    downloadLink.className = 'archived-card-action';
+    downloadLink.href = share.download_url;
+    downloadLink.target = '_blank';
+    downloadLink.rel = 'noopener noreferrer';
+    downloadLink.title = 'download';
+    downloadLink.setAttribute('aria-label', 'download');
+    downloadLink.innerHTML = DOWNLOAD_SVG;
+    row.appendChild(downloadLink);
+  }
+
   const restoreBtn = document.createElement('button');
   restoreBtn.className = 'archived-card-restore';
   restoreBtn.title = 'unarchive';
   restoreBtn.setAttribute('aria-label', 'unarchive');
-  restoreBtn.innerHTML = UNARCHIVE_SVG;
+  restoreBtn.innerHTML = RESTORE_SVG;
   restoreBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     restoreArchive(share.id);
@@ -1235,11 +1345,47 @@ function createArchivedCard(share) {
   return card;
 }
 
+function copyLink(url) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(() => {}, () => {
+      fallbackCopy(url);
+    });
+  } else {
+    fallbackCopy(url);
+  }
+}
+
+function fallbackCopy(url) {
+  const textarea = document.createElement('textarea');
+  textarea.value = url;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  try { document.execCommand('copy'); } catch {}
+  document.body.removeChild(textarea);
+}
+
+function showCopyFeedback(btn) {
+  const orig = btn.innerHTML;
+  const origColor = btn.style.color;
+  btn.innerHTML = CHECK_SVG;
+  btn.style.color = '#4ade80';
+  btn.style.transition = 'none';
+  setTimeout(() => {
+    btn.style.transition = 'color 0.3s ease';
+    btn.style.color = origColor || '';
+    btn.innerHTML = orig;
+  }, 1200);
+}
+
 function formatSize(bytes) {
-  if (!bytes || bytes === 0) return '0 B';
+  if (bytes == null || bytes < 0) return '0 B';
+  if (bytes === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
+  const decimals = i >= 2 ? 1 : 0;
+  return (bytes / Math.pow(1024, i)).toFixed(decimals) + ' ' + units[i];
 }
 
 function formatSpeed(bytesPerSec) {
@@ -1265,13 +1411,19 @@ function findShare(id) {
 function saveShares() {
   try {
     const all = [...shares, ...archivedShares];
-    localStorage.setItem('shares', JSON.stringify(all));
-  } catch {}
+    localStorage.setItem('microshare_data', JSON.stringify(all));
+  } catch {
+    showWarning('storage full — some data may not be saved');
+  }
 }
 
 function loadShares() {
   try {
-    const raw = localStorage.getItem('shares');
+    let raw = localStorage.getItem('microshare_data');
+    if (!raw) {
+      raw = localStorage.getItem('shares');
+      if (raw) localStorage.removeItem('shares');
+    }
     const all = raw ? JSON.parse(raw) : [];
     shares = all.filter(s => !s.archived && !s.deleted);
     archivedShares = all.filter(s => s.archived && !s.deleted);
@@ -1282,7 +1434,6 @@ function loadShares() {
 }
 
 function syncMutation(changedShares) {
-  if (!Auth.isAuthenticated()) return;
   Sync.pushToServer(changedShares);
 }
 
@@ -1293,15 +1444,19 @@ function debouncedSyncMutation(changedShares) {
 
 function connectWebSocket() {
   if (_ws && _ws.readyState <= 1) return;
+  if (_connectingWs) return;
+  _connectingWs = true;
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = protocol + '//' + window.location.host + '/api/ws';
   try {
     _ws = new WebSocket(url);
   } catch {
+    _connectingWs = false;
     scheduleReconnect();
     return;
   }
   _ws.addEventListener('open', () => {
+    _connectingWs = false;
     _wsBackoff = 1000;
     sendHello();
   });
@@ -1309,10 +1464,13 @@ function connectWebSocket() {
     try { handleWsMessage(JSON.parse(e.data)); } catch {}
   });
   _ws.addEventListener('close', () => {
+    _connectingWs = false;
     _ws = null;
     scheduleReconnect();
   });
-  _ws.addEventListener('error', () => {});
+  _ws.addEventListener('error', () => {
+    _connectingWs = false;
+  });
 }
 
 function reconnectWebSocket() {
@@ -1330,10 +1488,10 @@ function reconnectWebSocket() {
 
 function scheduleReconnect() {
   if (_wsReconnectTimer) return;
-  const delay = Math.min(_wsBackoff, 30000);
+  const delay = Math.min(_wsBackoff, WS_BACKOFF_MAX);
   _wsReconnectTimer = setTimeout(() => {
     _wsReconnectTimer = null;
-    _wsBackoff = Math.min(_wsBackoff * 2, 30000);
+    _wsBackoff = Math.min(_wsBackoff * 2, WS_BACKOFF_MAX);
     connectWebSocket();
   }, delay);
 }
@@ -1382,8 +1540,6 @@ function handleWsMessage(msg) {
     handleSignal(msg);
   } else if (msg.type === 'cancel') {
     handleCancel(msg);
-  } else {
-    console.warn('[WS] Unknown message type:', msg.type);
   }
 }
 
@@ -1413,8 +1569,8 @@ function createDeviceCard(device, myUserId) {
   if (device.inGlobal) card.classList.add('global');
   card.dataset.deviceId = device.id;
 
-  const info = document.createElement('div');
-  info.className = 'device-info';
+  const infoEl = document.createElement('div');
+  infoEl.className = 'device-info';
   const name = document.createElement('div');
   name.className = 'device-name';
   const nameSpan = document.createElement('span');
@@ -1427,9 +1583,9 @@ function createDeviceCard(device, myUserId) {
       startRenameDevice(device.id, name);
     });
   }
-  info.appendChild(name);
+  infoEl.appendChild(name);
 
-  card.appendChild(info);
+  card.appendChild(infoEl);
 
   card.addEventListener('click', (e) => {
     if (e.target.classList.contains('device-name')) return;
@@ -1440,25 +1596,11 @@ function createDeviceCard(device, myUserId) {
   return card;
 }
 
-function startRenameDevice(deviceId, nameEl) {
-  if (_editingDeviceId) return;
-  const device = _onlineDevices.find(d => d.id === deviceId);
-  if (!device) return;
-  const myUserId = Auth.isAuthenticated() ? safeUserId() : null;
-  if (!myUserId || device.userId !== myUserId) return;
-
-  if (isMobileView()) {
-    const input = prompt('rename device', device.name || '');
-    if (input === null || !input.trim()) return;
-    setDeviceName(input.trim());
-    return;
-  }
-
-  _editingDeviceId = deviceId;
+function createInlineEditor(nameEl, currentValue, onCommit, config) {
   const input = document.createElement('input');
   input.type = 'text';
-  input.className = 'device-name-input';
-  input.value = device.name || '';
+  input.className = (config && config.inputClass) || 'share-name-input';
+  input.value = currentValue || '';
   input.autocomplete = 'off';
   input.spellcheck = false;
   nameEl.replaceWith(input);
@@ -1469,26 +1611,18 @@ function startRenameDevice(deviceId, nameEl) {
   const finish = (commit) => {
     if (resolved) return;
     resolved = true;
-    _editingDeviceId = null;
     input.removeEventListener('keydown', onKey);
     input.removeEventListener('blur', onBlur);
     if (!commit) {
-      nameEl.innerHTML = '';
-      const span = document.createElement('span');
-      span.textContent = device.name;
-      nameEl.appendChild(span);
       input.replaceWith(nameEl);
       return;
     }
     const value = input.value.trim();
-    nameEl.innerHTML = '';
-    const span = document.createElement('span');
-    span.textContent = value || device.name;
-    nameEl.appendChild(span);
-    input.replaceWith(nameEl);
-    if (value && value !== device.name) {
-      setDeviceName(value);
+    if (value && value !== currentValue) {
+      onCommit(value);
     }
+    nameEl.textContent = value || currentValue;
+    input.replaceWith(nameEl);
   };
   const onKey = (e) => {
     if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
@@ -1497,6 +1631,95 @@ function startRenameDevice(deviceId, nameEl) {
   const onBlur = () => finish(true);
   input.addEventListener('keydown', onKey);
   input.addEventListener('blur', onBlur);
+}
+
+function startRenameShare(shareId, nameEl) {
+  const share = findShare(shareId);
+  if (!share) return;
+
+  const textSpan = nameEl.querySelector('span');
+  if (!textSpan) return;
+
+  if (isMobileView()) {
+    _pendingRename = { share, nameEl, textSpan };
+    renameInput.value = share.name || '';
+    renameModal.classList.add('visible');
+    requestAnimationFrame(() => {
+      renameInput.focus();
+      renameInput.setSelectionRange(0, renameInput.value.length);
+    });
+    return;
+  }
+
+  createInlineEditor(textSpan, share.name, (value) => {
+    share.name = value;
+    share.updated_at = Date.now();
+    saveShares();
+    debouncedSyncMutation([share]);
+  });
+}
+
+function startRenameDevice(deviceId, nameEl) {
+  if (_editingDeviceId) return;
+  const device = _onlineDevices.find(d => d.id === deviceId);
+  if (!device) return;
+  const myUserId = Auth.isAuthenticated() ? safeUserId() : null;
+  if (!myUserId || device.userId !== myUserId) return;
+
+  _editingDeviceId = deviceId;
+
+  if (isMobileView()) {
+    const createMobileInput = () => {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'device-name-input';
+      input.value = device.name || '';
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      nameEl.replaceWith(input);
+      input.focus();
+      input.select();
+
+      let resolved = false;
+      const finish = (commit) => {
+        if (resolved) return;
+        resolved = true;
+        _editingDeviceId = null;
+        input.removeEventListener('keydown', onKey);
+        input.removeEventListener('blur', onBlur);
+        if (!commit) {
+          nameEl.innerHTML = '';
+          const span = document.createElement('span');
+          span.textContent = device.name;
+          nameEl.appendChild(span);
+          input.replaceWith(nameEl);
+          return;
+        }
+        const value = input.value.trim();
+        if (value && value !== device.name) {
+          setDeviceName(value);
+        }
+        nameEl.innerHTML = '';
+        const span = document.createElement('span');
+        span.textContent = value || device.name;
+        nameEl.appendChild(span);
+        input.replaceWith(nameEl);
+      };
+      const onKey = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      };
+      const onBlur = () => finish(true);
+      input.addEventListener('keydown', onKey);
+      input.addEventListener('blur', onBlur);
+    };
+    createMobileInput();
+    return;
+  }
+
+  createInlineEditor(nameEl, device.name, (value) => {
+    setDeviceName(value);
+  }, { inputClass: 'device-name-input' });
 }
 
 function syncDevicesToServer() {
@@ -1518,16 +1741,18 @@ function syncDevicesToServer() {
       'Authorization': 'Bearer ' + token,
     },
     body: JSON.stringify({ devices: payload }),
-  }).catch(err => console.error('[syncDevices] Failed:', err));
+  }).catch(() => {
+    setTimeout(syncDevicesToServer, 5000);
+  });
 }
 
 function handleIncomingOffer(msg) {
   const from = _onlineDevices.find(d => d.id === msg.from);
-  _pendingIncoming = { from, file: msg.file, data: msg.data, source: msg.from };
-  if (_pendingIncoming._timeout) clearTimeout(_pendingIncoming._timeout);
-  _pendingIncoming._timeout = setTimeout(() => {
+  _pendingIncoming = { from, file: msg.file, data: msg.data, source: msg.from, incomingTimeout: null };
+  if (_pendingIncoming.incomingTimeout) clearTimeout(_pendingIncoming.incomingTimeout);
+  _pendingIncoming.incomingTimeout = setTimeout(() => {
     if (_pendingIncoming) declineIncoming();
-  }, 60000);
+  }, INCOMING_TIMEOUT_MS);
   incomingFrom.textContent = (from ? from.name : 'someone') + ' is sending you a file';
   incomingFileName.textContent = msg.file && msg.file.name ? msg.file.name : 'untitled';
   incomingFileSize.textContent = msg.file && msg.file.size ? formatSize(msg.file.size) : '';
@@ -1536,7 +1761,7 @@ function handleIncomingOffer(msg) {
 
 function acceptIncoming() {
   if (!_pendingIncoming) return;
-  if (_pendingIncoming._timeout) clearTimeout(_pendingIncoming._timeout);
+  if (_pendingIncoming.incomingTimeout) clearTimeout(_pendingIncoming.incomingTimeout);
   incomingModal.classList.remove('visible');
   const { from, file, data, source } = _pendingIncoming;
   _pendingIncoming = null;
@@ -1545,7 +1770,7 @@ function acceptIncoming() {
 
 function declineIncoming() {
   if (!_pendingIncoming) return;
-  if (_pendingIncoming._timeout) clearTimeout(_pendingIncoming._timeout);
+  if (_pendingIncoming.incomingTimeout) clearTimeout(_pendingIncoming.incomingTimeout);
   const { source } = _pendingIncoming;
   _pendingIncoming = null;
   incomingModal.classList.remove('visible');
@@ -1621,7 +1846,7 @@ function createPeer(targetId, role, file) {
           showSameNetworkWarning(peer);
           cleanupPeer();
         }
-      }, 8000);
+      }, PEER_FAILURE_TIMEOUT);
     } else {
       if (peer.failedTimer) { clearTimeout(peer.failedTimer); peer.failedTimer = null; }
     }
@@ -1643,9 +1868,7 @@ function showSameNetworkWarning(peer) {
   const target = _onlineDevices.find(d => d.id === peer.targetId);
   if (target && _myPublicIp && target.publicIp && _myPublicIp === target.publicIp) {
     showWarning('peer to peer file sharing may fail when both devices are on the same network');
-  } else {
-    showWarning('connection failed');
-  }
+  } else { showWarning('connection failed'); }
   cleanupPeer();
 }
 
@@ -1692,9 +1915,9 @@ function setupReceiverChannel(peer) {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 300000);
       if (_lastBlobUrl) URL.revokeObjectURL(_lastBlobUrl);
       _lastBlobUrl = url;
+      setTimeout(() => URL.revokeObjectURL(url), BLOB_URL_REVOKE_DELAY);
       cleanupPeer();
     }
   };
@@ -1709,13 +1932,18 @@ function setupReceiverChannel(peer) {
 async function sendFileChunks(peer) {
   const { channel, file } = peer;
   const reader = file.stream().getReader();
+  let spinStart = Date.now();
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      while (channel.bufferedAmount > 8 * 1024 * 1024) {
+      while (channel.bufferedAmount > CHANNEL_BUFFER_MAX) {
+        if (Date.now() - spinStart > CHANNEL_SPIN_TIMEOUT) {
+          throw new Error('channel timeout');
+        }
         await new Promise(r => setTimeout(r, 10));
       }
+      spinStart = Date.now();
       channel.send(value);
     }
   } catch {
@@ -1724,6 +1952,9 @@ async function sendFileChunks(peer) {
 }
 
 function sendFileToDevice(file, target) {
+  const now = Date.now();
+  if (now - _lastOfferTime < OFFER_COOLDOWN_MS) return;
+  _lastOfferTime = now;
   if (!_ws || _ws.readyState !== 1) {
     showWarning('not connected to server');
     return;
